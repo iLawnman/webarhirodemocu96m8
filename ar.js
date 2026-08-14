@@ -119,7 +119,7 @@ function initAR() {
 
   arMarkerControls = new THREEx.ArMarkerControls(arToolkitContext, markerRoot, {
     type: 'pattern',
-    patternUrl: 'markerT1.patt',
+    patternUrl: 'assets/hiro.patt',
     changeMatrixMode: 'modelViewMatrix'
   });
 
