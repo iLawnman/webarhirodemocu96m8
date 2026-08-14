@@ -1,34 +1,65 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
+  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-  <title>AR Image Target</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-      background: #000;
-    }
-    .ar-answer-button {
-      position: fixed;
-      left: 50%;
-      bottom: 40px;
-      transform: translateX(-50%);
-      z-index: 10;
-      padding: 14px 32px;
-      font-size: 18px;
-      border: none;
-      border-radius: 8px;
-      background: #ffffff;
-      color: #111111;
-    }
-  </style>
+  <title>AR Image Quest</title>
+  <link rel="stylesheet" href="css/app.css" />
+  <script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1.4.2/dist/aframe-master.min.js"></script>
+  <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 </head>
 <body>
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/three.js/build/ar.js"></script>
-  <script type="module" src="./src/main.js"></script>
+  <div class="arjs-loader">
+    <div>Loading, please wait...</div>
+  </div>
+
+  <a-scene
+    vr-mode-ui="enabled: false"
+    renderer="logarithmicDepthBuffer: true;"
+    embedded
+    arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
+  >
+    <a-nft
+      id="imageTarget"
+      type="nft"
+      url="markers/target/target"
+      smooth="true"
+      smoothCount="10"
+      smoothTolerance="0.01"
+      smoothThreshold="5"
+    >
+      <a-entity id="arTarget" visible="false">
+        <a-image
+          id="arTargetImage"
+          src="assets/target-image.png"
+          position="0 0 0"
+          width="1"
+          height="1"
+        ></a-image>
+        <a-plane
+          id="answerButton"
+          class="clickable"
+          color="#2E8B57"
+          position="0 -0.75 0"
+          width="1"
+          height="0.35"
+        >
+          <a-text
+            value="Ответить"
+            align="center"
+            color="#FFFFFF"
+            position="0 0 0.01"
+            width="2"
+          ></a-text>
+        </a-plane>
+      </a-entity>
+    </a-nft>
+
+    <a-entity camera>
+      <a-cursor fuse="false" raycaster="objects: .clickable"></a-cursor>
+    </a-entity>
+  </a-scene>
+
+  <script type="module" src="js/app/Bootstrap.js"></script>
 </body>
 </html>
