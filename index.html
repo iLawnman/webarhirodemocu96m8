@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>1 AR Marker Viewer</title>
+  <title>2 AR Marker Viewer</title>
 
+  <!-- Official combo from AR.js docs: A-Frame 1.6.0 + AR.js 3.4.7 -->
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
 
   <style>
     :root{
-      --bg:#0b0d10;
       --panel:#12161b;
       --line:#232a31;
       --accent:#5ee3a5;
@@ -18,239 +18,133 @@
       --text:#e7ecef;
       --text-dim:#8a97a3;
       --danger:#e35e5e;
-      --mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
-      --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+      --mono:"IBM Plex Mono",Consolas,monospace;
     }
     *{box-sizing:border-box;}
-    html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;}
+    html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;color:var(--text);font-family:system-ui,sans-serif;}
 
-    .arjs-loader{
-      position:fixed;inset:0;z-index:9999;background:var(--bg);
-      display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;
-    }
-    .arjs-loader .spinner{
-      width:28px;height:28px;border-radius:50%;
-      border:3px solid var(--line);border-top-color:var(--accent);
-      animation:spin .9s linear infinite;
-    }
-    @keyframes spin{to{transform:rotate(360deg);}}
-    .arjs-loader p{font-family:var(--mono);font-size:12px;color:var(--text-dim);}
+    /* Do NOT force video/canvas to 100vw×100vh — that breaks AR.js
+       projection and the  detaches from the marker even when found. */
 
-    /* —— compact chrome —— */
     .chrome{
-      position:fixed;left:0;right:0;bottom:0;z-index:60;
+      position:fixed;left:0;right:0;bottom:0;z-index:50;
       padding:10px 12px calc(10px + env(safe-area-inset-bottom));
-      background:linear-gradient(0deg,rgba(11,13,16,.92),rgba(11,13,16,.55) 75%,transparent);
-      display:flex;flex-direction:column;gap:8px;
+      background:linear-gradient(0deg,rgba(0,0,0,.85),rgba(0,0,0,.4) 70%,transparent);
+      display:flex;gap:8px;align-items:center;flex-wrap:wrap;
       transition:opacity .2s,transform .2s;
     }
-    body.ui-hidden .chrome{opacity:0;pointer-events:none;transform:translateY(16px);}
+    body.ui-hidden .chrome{opacity:0;pointer-events:none;transform:translateY(12px);}
 
-    .chrome-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-
-    .status-pill{
+    .pill{
       font-family:var(--mono);font-size:11px;
-      padding:6px 10px;border-radius:16px;
+      padding:6px 10px;border-radius:14px;
       background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
-      display:flex;align-items:center;gap:6px;white-space:nowrap;
+      display:inline-flex;align-items:center;gap:6px;
     }
-    .status-pill .led{width:6px;height:6px;border-radius:50%;background:var(--text-dim);}
-    .status-pill.found{border-color:var(--accent-dim);color:var(--accent);}
-    .status-pill.found .led{background:var(--accent);box-shadow:0 0 6px var(--accent);}
-
-    .seg{
-      display:flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;
-    }
-    .seg button{
-      border:0;background:transparent;color:var(--text-dim);
-      padding:7px 10px;font-size:12px;cursor:pointer;
-      border-right:1px solid var(--line);
-    }
-    .seg button:last-child{border-right:0;}
-    .seg button.active{background:var(--accent);color:#06120c;font-weight:600;}
+    .pill .led{width:6px;height:6px;border-radius:50%;background:var(--text-dim);}
+    .pill.found{border-color:var(--accent-dim);color:var(--accent);}
+    .pill.found .led{background:var(--accent);box-shadow:0 0 6px var(--accent);}
 
     .chip{
       font-family:var(--mono);font-size:11px;color:var(--text-dim);
       background:var(--panel);border:1px solid var(--line);border-radius:8px;
-      padding:7px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
-      -webkit-tap-highlight-color:transparent;
+      padding:6px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:5px;
     }
-    .chip input{margin:0;}
     .chip.on{border-color:var(--accent-dim);color:var(--accent);}
+    .chip input{margin:0;}
 
-    .file-btn{
-      position:relative;overflow:hidden;
-      font-size:12px;color:var(--text);
-      background:var(--panel);border:1px solid var(--line);border-radius:8px;
-      padding:7px 10px;cursor:pointer;white-space:nowrap;
-    }
-    .file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;}
-    .file-btn.has-file{border-color:var(--accent-dim);color:var(--accent);}
-    #customFileWrap{display:none;}
-
-    #diagStatus{font-family:var(--mono);font-size:10px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+    #diag{font-family:var(--mono);font-size:10px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
     #uiToggle{
-      position:fixed;top:calc(10px + env(safe-area-inset-bottom));left:12px;z-index:90;
+      position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:12px;z-index:60;
       font-family:var(--mono);font-size:11px;color:var(--text);
       background:rgba(18,22,27,.92);border:1px solid var(--line);border-radius:8px;
       padding:8px 10px;cursor:pointer;
     }
     body.ui-hidden #uiToggle{border-color:var(--accent-dim);color:var(--accent);}
 
-    /* —— AR layers —— */
-    a-scene{
-      position:fixed !important;inset:0 !important;
-      width:100% !important;height:100% !important;
-      max-width:none !important;max-height:none !important;
-    }
-    video{
-      position:fixed !important;top:0 !important;left:0 !important;
-      width:100vw !important;height:100vh !important;height:100dvh !important;
-      object-fit:cover !important;z-index:0 !important;margin:0 !important;padding:0 !important;
-    }
-    a-scene canvas, canvas.a-canvas{
-      position:fixed !important;top:0 !important;left:0 !important;
-      width:100vw !important;height:100vh !important;height:100dvh !important;
-      z-index:1 !important;background:transparent !important;display:block !important;
-      margin:0 !important;padding:0 !important;
-    }
-
-    /* Our own marker frame overlay (always under our control) */
-    #markerFrame{
-      position:fixed;inset:0;z-index:2;pointer-events:none;
-      display:none;
-    }
-    #markerFrame.on{display:block;}
-    #markerFrame .box{
-      position:absolute;left:50%;top:50%;
-      width:min(42vw,180px);height:min(42vw,180px);
-      transform:translate(-50%,-50%);
-      border:2px solid var(--accent);
-      box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 0 18px rgba(94,227,165,.35);
-      border-radius:4px;
-      opacity:.85;
-    }
-    #markerFrame .box::before,#markerFrame .box::after{
-      content:"";position:absolute;width:18px;height:18px;border:3px solid var(--accent);
-    }
-    #markerFrame .box::before{top:-3px;left:-3px;border-right:0;border-bottom:0;}
-    #markerFrame .box::after{bottom:-3px;right:-3px;border-left:0;border-top:0;}
-    #markerFrame.found .box{border-color:#fff;box-shadow:0 0 22px rgba(94,227,165,.7);}
-
-    /* AR.js native debug canvas — pinned top-left when present */
+    /* AR.js debug canvas (threshold view) */
     canvas.arjs-debug-ui{
-      position:fixed !important;
-      top:8px !important;left:8px !important;
-      width:160px !important;height:120px !important;
-      z-index:80 !important;
-      border:1px solid var(--accent-dim) !important;
-      border-radius:6px !important;
-      background:#000 !important;
-      object-fit:contain !important;
+      position:fixed !important;top:8px !important;left:8px !important;
+      width:140px !important;height:105px !important;
+      z-index:40 !important;border:1px solid var(--accent-dim) !important;
+      border-radius:6px !important;background:#000 !important;
       pointer-events:none !important;
     }
-    body:not(.show-arjs-debug) canvas.arjs-debug-ui{display:none !important;}
+    body:not(.show-debug) canvas.arjs-debug-ui{display:none !important;}
 
-    /* —— log (collapsed by default) —— */
+    /* log */
     #logPanel{
-      position:fixed;top:0;right:0;bottom:0;z-index:200;
-      width:min(72vw,300px);
-      background:rgba(10,12,15,.88);
-      border-left:1px solid var(--line);
-      display:flex;flex-direction:column;
-      transform:translateX(0);
-      transition:transform .25s ease;
+      position:fixed;top:0;right:0;bottom:0;z-index:100;
+      width:min(70vw,280px);background:rgba(10,12,15,.9);
+      border-left:1px solid var(--line);display:flex;flex-direction:column;
+      transform:translateX(0);transition:transform .25s ease;
     }
-    #logPanel.hidden{transform:translateX(calc(100% - 26px));}
+    #logPanel.hidden{transform:translateX(calc(100% - 24px));}
     #logEar{
       position:absolute;left:0;top:50%;transform:translate(-100%,-50%);
-      width:26px;min-height:72px;padding:10px 0;
-      display:flex;align-items:center;justify-content:center;
+      width:24px;min-height:64px;display:flex;align-items:center;justify-content:center;
       background:rgba(10,12,15,.92);border:1px solid var(--line);border-right:0;
       border-radius:8px 0 0 8px;cursor:pointer;
     }
-    #logEar span{
-      writing-mode:vertical-rl;transform:rotate(180deg);
-      font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--text-dim);
-    }
-    #logPanel:not(.hidden) #logEar span{color:var(--accent);}
-    #logPanelHead{
-      flex:none;display:flex;align-items:center;justify-content:space-between;
-      padding:8px 10px;border-bottom:1px solid var(--line);
-      font-family:var(--mono);font-size:11px;color:var(--text-dim);
-    }
-    #logPanelHead button{
-      font-family:var(--mono);font-size:11px;color:var(--text);
-      background:var(--panel);border:1px solid var(--line);border-radius:6px;
-      padding:3px 8px;cursor:pointer;
-    }
-    #logList{flex:1;overflow-y:auto;padding:8px 10px;font-family:var(--mono);font-size:10px;line-height:1.4;}
-    #logList .entry{margin-bottom:5px;white-space:pre-wrap;word-break:break-word;}
+    #logEar span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:10px;color:var(--text-dim);}
+    #logHead{padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;}
+    #logHead button{font-family:var(--mono);font-size:11px;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:3px 8px;cursor:pointer;}
+    #logList{flex:1;overflow:auto;padding:8px;font-family:var(--mono);font-size:10px;line-height:1.4;}
+    #logList .e{margin-bottom:4px;word-break:break-word;}
     #logList .t{color:var(--text-dim);}
-    #logList .lvl-info{color:var(--text);}
-    #logList .lvl-warn{color:#e3c15e;}
-    #logList .lvl-error{color:var(--danger);}
+    #logList .err{color:var(--danger);}
+    #logList .ok{color:var(--accent);}
+
+    .loader{
+      position:fixed;inset:0;z-index:9999;background:#000;
+      display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;
+      font-family:var(--mono);font-size:12px;color:var(--text-dim);
+    }
+    .loader .sp{
+      width:26px;height:26px;border-radius:50%;
+      border:3px solid #333;border-top-color:var(--accent);
+      animation:spin .8s linear infinite;
+    }
+    @keyframes spin{to{transform:rotate(360deg);}}
   </style>
 </head>
-<body class="show-arjs-debug">
+<body class="show-debug">
 
-<div class="chrome" id="chrome">
-  <div class="chrome-row">
-    <div id="statusPill" class="status-pill"><span class="led"></span><span id="statusText">поиск…</span></div>
-    <div class="seg">
-      <button id="btnHiro" class="active" type="button">Hiro</button>
-      <button id="btnCustom" type="button">Свой</button>
-    </div>
-    <div id="customFileWrap">
-      <label class="file-btn" id="fileBtn">
-        <span id="fileBtnLabel">.patt…</span>
-        <input type="file" id="pattFile" accept=".patt">
-      </label>
-    </div>
-    <label class="chip on" id="debugChip">
-      <input type="checkbox" id="debugToggle" checked> рамки
-    </label>
-    <span id="diagStatus"></span>
-  </div>
+<div class="loader" id="loader"><div class="sp"></div><span>камера…</span></div>
+
+<div class="chrome">
+  <div class="pill" id="statusPill"><span class="led"></span><span id="statusText">поиск…</span></div>
+  <label class="chip on" id="debugChip"><input type="checkbox" id="debugToggle" checked> рамки</label>
+  <span id="diag"></span>
 </div>
-
 <button id="uiToggle" type="button">UI</button>
 
-<div class="arjs-loader" id="loader">
-  <div class="spinner"></div>
-  <p>Камера…</p>
-</div>
-
-<div id="markerFrame"><div class="box"></div></div>
-
 <div id="logPanel" class="hidden">
-  <button id="logEar" type="button" title="Лог"><span>ЛОГ</span></button>
-  <div id="logPanelHead">
-    <span>ЛОГ</span>
-    <div style="display:flex;gap:6px;">
-      <button id="logClearBtn" type="button">очистить</button>
-      <button id="logHideBtn" type="button">✕</button>
-    </div>
-  </div>
+  <button id="logEar" type="button"><span>ЛОГ</span></button>
+  <div id="logHead"><span>ЛОГ</span><button id="logClear" type="button">очистить</button></div>
   <div id="logList"></div>
 </div>
 
+<!-- Minimal AR.js scene — mirrors official basic example.
+      is a CHILD of a-marker so it follows the tracked pose. -->
 <a-scene
   id="scene"
-  vr-mode-ui="enabled: false"
-  renderer="logarithmicDepthBuffer: true; precision: mediump; antialias: true; alpha: true"
   embedded
-  arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+  vr-mode-ui="enabled: false"
+  renderer="antialias: true; alpha: true; precision: mediump"
+  arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono; trackingMethod: best;"
   loading-screen="enabled: false"
 >
-  <a-assets></a-assets>
-
-  <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
-    <a-box position="0 0.5 0" depth="1" height="1" width="1"
-           material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
-           rotation="0 45 0"
-           animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">
+  <a-marker id="marker" preset="hiro" emitevents="true">
+    <!-- Bright  sitting on the marker plane (Y up in marker space) -->
+    <a-box
+      id=""
+      position="0 0.5 0"
+      width="1" height="1" depth="1"
+      color="#ff2d55"
+      material="shader: flat"
+      animation="property: rotation; to: 0 360 0; loop: true; dur: 4000; easing: linear">
     </a-box>
   </a-marker>
 
@@ -258,228 +152,113 @@
 </a-scene>
 
 <script>
-(function(){
+(function () {
   var logList = document.getElementById('logList');
   var logPanel = document.getElementById('logPanel');
-  var logHideBtn = document.getElementById('logHideBtn');
-  var logEar = document.getElementById('logEar');
-  var logClearBtn = document.getElementById('logClearBtn');
-  var logCount = 0;
-
-  function pad(n){ return n < 10 ? '0'+n : ''+n; }
-  function timeStr(){
+  var n = 0;
+  function t() {
     var d = new Date();
-    return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+    return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
   }
-  function stringifyArg(a){
-    if(a instanceof Error) return a.message;
-    if(typeof a === 'object'){
-      try { return JSON.stringify(a); } catch(e){ return String(a); }
-    }
-    return String(a);
-  }
-  function logToPanel(level, args){
-    logCount++;
-    var line = document.createElement('div');
-    line.className = 'entry';
-    var msg = Array.prototype.map.call(args, stringifyArg).join(' ');
-    line.innerHTML = '<span class="t">['+timeStr()+']</span> <span class="lvl-'+level+'">'+
-      msg.replace(/</g,'&lt;') + '</span>';
-    logList.appendChild(line);
+  function panelLog(cls, msg) {
+    n++;
+    var el = document.createElement('div');
+    el.className = 'e';
+    el.innerHTML = '<span class="t">[' + t() + ']</span> <span class="' + (cls || '') + '">' + String(msg).replace(/</g, '&lt;') + '</span>';
+    logList.appendChild(el);
     logList.scrollTop = logList.scrollHeight;
-    if(logCount > 200){ logList.removeChild(logList.firstChild); }
+    if (n > 150 && logList.firstChild) logList.removeChild(logList.firstChild);
   }
-  ['log','warn','error'].forEach(function(level){
-    var original = console[level];
-    console[level] = function(){
-      logToPanel(level === 'log' ? 'info' : level, arguments);
-      original.apply(console, arguments);
+  ['log', 'warn', 'error'].forEach(function (lvl) {
+    var orig = console[lvl];
+    console[lvl] = function () {
+      var msg = Array.prototype.slice.call(arguments).map(function (a) {
+        if (a instanceof Error) return a.message;
+        if (typeof a === 'object') { try { return JSON.stringify(a); } catch (e) { return String(a); } }
+        return String(a);
+      }).join(' ');
+      panelLog(lvl === 'error' ? 'err' : (lvl === 'warn' ? '' : ''), msg);
+      orig.apply(console, arguments);
     };
   });
-  window.addEventListener('error', function(e){
-    logToPanel('error', ['JS: ' + e.message]);
-  });
-  logHideBtn.addEventListener('click', function(){ logPanel.classList.add('hidden'); });
-  logEar.addEventListener('click', function(){ logPanel.classList.toggle('hidden'); });
-  logClearBtn.addEventListener('click', function(){ logList.innerHTML = ''; logCount = 0; });
+  window.addEventListener('error', function (e) { panelLog('err', 'JS: ' + e.message); });
 
-  console.log('AR v7 start');
+  document.getElementById('logEar').onclick = function () { logPanel.classList.toggle('hidden'); };
+  document.getElementById('logClear').onclick = function () { logList.innerHTML = ''; n = 0; };
 
   var scene = document.getElementById('scene');
-  var loader = document.getElementById('loader');
+  var marker = document.getElementById('marker');
+  var  = document.getElementById('');
   var statusPill = document.getElementById('statusPill');
   var statusText = document.getElementById('statusText');
-  var markerHiro = document.getElementById('markerHiro');
-  var btnHiro = document.getElementById('btnHiro');
-  var btnCustom = document.getElementById('btnCustom');
-  var customFileWrap = document.getElementById('customFileWrap');
-  var fileInput = document.getElementById('pattFile');
-  var fileBtn = document.getElementById('fileBtn');
-  var fileBtnLabel = document.getElementById('fileBtnLabel');
-  var diagStatus = document.getElementById('diagStatus');
+  var diag = document.getElementById('diag');
+  var loader = document.getElementById('loader');
   var debugToggle = document.getElementById('debugToggle');
   var debugChip = document.getElementById('debugChip');
-  var markerFrame = document.getElementById('markerFrame');
-  var uiToggle = document.getElementById('uiToggle');
-  var customObjectUrl = null;
 
-  function checkPattern(url, label){
-    if(!url){ diagStatus.textContent = ''; return; }
-    fetch(url, {cache:'no-store'}).then(function(res){
-      if(res.ok){
-        diagStatus.textContent = label + ' ✓';
-        diagStatus.style.color = 'var(--accent)';
-      } else {
-        diagStatus.textContent = label + ' HTTP ' + res.status;
-        diagStatus.style.color = 'var(--danger)';
-      }
-    }).catch(function(err){
-      diagStatus.textContent = 'нет файла (нужен http/https)';
-      diagStatus.style.color = 'var(--danger)';
-    });
+  function setFound(on) {
+    statusPill.classList.toggle('found', on);
+    statusText.textContent = on ? 'маркер · куб' : 'поиск…';
   }
-  checkPattern('assets/hiro.patt', 'hiro.patt');
 
-  scene.addEventListener('camera-error', function(e){
-    diagStatus.textContent = 'камера: нет доступа';
-    diagStatus.style.color = 'var(--danger)';
+  function pinDebug() {
+    var show = document.body.classList.contains('show-debug');
+    var list = document.querySelectorAll('canvas');
+    for (var i = 0; i < list.length; i++) {
+      var c = list[i];
+      if (c.classList.contains('a-canvas')) continue;
+      if (c.closest && c.closest('a-scene')) continue;
+      c.classList.add('arjs-debug-ui');
+      c.style.setProperty('display', show ? 'block' : 'none', 'important');
+      c.style.setProperty('position', 'fixed', 'important');
+      c.style.setProperty('top', '8px', 'important');
+      c.style.setProperty('left', '8px', 'important');
+      c.style.setProperty('width', '140px', 'important');
+      c.style.setProperty('height', '105px', 'important');
+      c.style.setProperty('z-index', '40', 'important');
+    }
+  }
+  debugToggle.onchange = function () {
+    document.body.classList.toggle('show-debug', debugToggle.checked);
+    debugChip.classList.toggle('on', debugToggle.checked);
+    pinDebug();
+  };
+  [500, 1500, 3000, 6000].forEach(function (ms) { setTimeout(pinDebug, ms); });
+
+  document.getElementById('uiToggle').onclick = function () {
+    var h = document.body.classList.toggle('ui-hidden');
+    this.textContent = h ? 'UI+' : 'UI';
+  };
+
+  scene.addEventListener('loaded', function () {
+    loader.style.display = 'none';
+    console.log('scene loaded');
+  });
+  scene.addEventListener('camera-error', function (e) {
+    diag.textContent = 'нет камеры / нужен https';
+    diag.style.color = 'var(--danger)';
     console.error('camera-error', e.detail);
   });
+  setTimeout(function () { loader.style.display = 'none'; }, 5000);
 
-  /* —— debug frames —— */
-  function setDebugUi(on){
-    document.body.classList.toggle('show-arjs-debug', !!on);
-    debugToggle.checked = !!on;
-    debugChip.classList.toggle('on', !!on);
-    markerFrame.classList.toggle('on', !!on);
-    pinArjsDebugCanvas();
-  }
-  function pinArjsDebugCanvas(){
-    var show = document.body.classList.contains('show-arjs-debug');
-    var list = document.querySelectorAll('canvas');
-    var found = 0;
-    for(var i = 0; i < list.length; i++){
-      var c = list[i];
-      if(c.classList.contains('a-canvas')) continue;
-      if(c.parentElement && c.parentElement.closest && c.parentElement.closest('a-scene')) continue;
-      // skip if it's the WebGL canvas (has webgl context)
-      try{
-        if(c.getContext && (c.getContext('webgl') || c.getContext('webgl2'))) continue;
-      }catch(e){}
-      c.classList.add('arjs-debug-ui');
-      c.style.cssText = [
-        'position:fixed','top:8px','left:8px','width:160px','height:120px',
-        'z-index:80','border:1px solid #2f7a58','border-radius:6px',
-        'background:#000','display:'+(show?'block':'none'),
-        'object-fit:contain','pointer-events:none'
-      ].join(' !important;') + ' !important;';
-      found++;
+  marker.addEventListener('markerFound', function () {
+    setFound(true);
+    console.log('[AR] markerFound');
+    // Ensure hierarchy is visible —  is child of marker, so it
+    // inherits the marker pose automatically.
+    if (marker.object3D) marker.object3D.visible = true;
+    if ( && .object3D) {
+      .object3D.visible = true;
+      var p = .object3D.getWorldPosition(new THREE.Vector3());
+      console.log('[AR]  world pos', p.x.toFixed(2), p.y.toFixed(2), p.z.toFixed(2));
     }
-    if(found && !pinArjsDebugCanvas._logged){
-      pinArjsDebugCanvas._logged = true;
-      console.log('AR.js debug canvas: ' + found);
-    }
-  }
-  debugToggle.addEventListener('change', function(){ setDebugUi(debugToggle.checked); });
-  setDebugUi(true);
-  [400, 1000, 2000, 4000, 8000].forEach(function(ms){ setTimeout(pinArjsDebugCanvas, ms); });
-  if(window.MutationObserver){
-    new MutationObserver(function(muts){
-      for(var i=0;i<muts.length;i++){
-        var nodes = muts[i].addedNodes;
-        for(var j=0;j<nodes.length;j++){
-          if(nodes[j] && nodes[j].nodeName === 'CANVAS'){ pinArjsDebugCanvas(); return; }
-        }
-      }
-    }).observe(document.body, {childList:true, subtree:true});
-  }
-
-  uiToggle.addEventListener('click', function(){
-    var hidden = document.body.classList.toggle('ui-hidden');
-    uiToggle.textContent = hidden ? 'UI+' : 'UI';
+  });
+  marker.addEventListener('markerLost', function () {
+    setFound(false);
+    console.log('[AR] markerLost');
   });
 
-  scene.addEventListener('loaded', function(){ loader.style.display = 'none'; });
-  setTimeout(function(){ loader.style.display = 'none'; }, 4000);
-
-  setTimeout(function(){
-    var video = document.querySelector('video');
-    if(video) console.log('video ' + video.videoWidth + 'x' + video.videoHeight);
-    else console.warn('no video');
-  }, 2000);
-
-  /* CSS size only — do not touch AR camera projection */
-  var lastFs = '';
-  function forceCssSize(){
-    var w = window.innerWidth, h = window.innerHeight;
-    var video = document.querySelector('video');
-    var canvas = document.querySelector('canvas.a-canvas');
-    if(video){
-      video.style.setProperty('width', w+'px', 'important');
-      video.style.setProperty('height', h+'px', 'important');
-    }
-    if(canvas){
-      canvas.style.setProperty('width', w+'px', 'important');
-      canvas.style.setProperty('height', h+'px', 'important');
-    }
-    var key = w+'x'+h;
-    if(key !== lastFs){ lastFs = key; console.log('viewport '+key); }
-  }
-  [300,1000,2500].forEach(function(ms){ setTimeout(forceCssSize, ms); });
-  window.addEventListener('resize', function(){ setTimeout(forceCssSize, 50); });
-  window.addEventListener('orientationchange', function(){ setTimeout(forceCssSize, 300); });
-
-  function setStatus(found){
-    if(found){
-      statusPill.classList.add('found');
-      statusText.textContent = 'найден';
-      markerFrame.classList.add('found');
-    } else {
-      statusPill.classList.remove('found');
-      statusText.textContent = 'поиск…';
-      markerFrame.classList.remove('found');
-    }
-  }
-
-  if(markerHiro){
-    markerHiro.addEventListener('markerFound', function(){
-      setStatus(true);
-      console.log('[AR] markerFound');
-      if(markerHiro.object3D){
-        markerHiro.object3D.visible = true;
-        markerHiro.object3D.traverse(function(o){ o.visible = true; });
-      }
-    });
-    markerHiro.addEventListener('markerLost', function(){
-      setStatus(false);
-      console.log('[AR] markerLost');
-    });
-  }
-
-  btnHiro.addEventListener('click', function(){
-    btnHiro.classList.add('active');
-    btnCustom.classList.remove('active');
-    customFileWrap.style.display = 'none';
-    if(markerHiro){
-      markerHiro.setAttribute('visible', 'true');
-      if(markerHiro.object3D) markerHiro.object3D.visible = true;
-    }
-    checkPattern('assets/hiro.patt', 'hiro.patt');
-    setStatus(false);
-  });
-  btnCustom.addEventListener('click', function(){
-    btnCustom.classList.add('active');
-    btnHiro.classList.remove('active');
-    customFileWrap.style.display = 'block';
-    console.warn('Кастомный .patt: маркер в HTML отключён');
-  });
-  fileInput.addEventListener('change', function(e){
-    var file = e.target.files && e.target.files[0];
-    if(!file) return;
-    fileBtnLabel.textContent = file.name;
-    fileBtn.classList.add('has-file');
-    console.warn('Нужен раскомментированный a-marker custom в HTML');
-  });
+  console.log('AR v8 — preset hiro, cube child of marker');
 })();
 </script>
 </body>
