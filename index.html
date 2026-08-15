@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Txt Marker Viewer</title>
+  <title>Anchor Txt AR Marker Viewer</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -251,10 +251,6 @@
     <a-box position="0 0 0" depth="1" height="1" width="1"
            material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
     ></a-box>
-    <!-- Текстовый якорь с именем маркера (куб не трогаем) -->
-    <a-text value="Hiro" position="0 2 0" align="center" color="#e7ecef"
-            width="3.5" scale="1.2 1.2 1.2"
-            material="shader: flat; transparent: true"></a-text>
   </a-marker>
 
   <a-entity camera></a-entity>
@@ -444,6 +440,46 @@
       }
     }
 
+    /* Постоянный мировой якорь: ставится один раз при распознавании
+       и остаётся на месте независимо от видимости маркера */
+    var hiroAnchorPlaced = false;
+
+    function placeWorldAnchor(markerEl, label){
+      if(!markerEl || !markerEl.object3D) return;
+      var THREE = window.THREE || (window.AFRAME && window.AFRAME.THREE);
+      if(!THREE){
+        console.warn('THREE не найден, якорь не создан');
+        return;
+      }
+
+      // Берём мировые координаты маркера в момент распознавания
+      var worldPos = new THREE.Vector3();
+      var worldQuat = new THREE.Quaternion();
+      markerEl.object3D.updateMatrixWorld(true);
+      markerEl.object3D.getWorldPosition(worldPos);
+      markerEl.object3D.getWorldQuaternion(worldQuat);
+
+      // Отдельный якорь (не ребёнок маркера)
+      var anchor = document.createElement('a-entity');
+      anchor.setAttribute('id', 'world-anchor-' + label);
+      anchor.object3D.position.copy(worldPos);
+      anchor.object3D.quaternion.copy(worldQuat);
+
+      // Текст, привязанный к якорю
+      var text = document.createElement('a-text');
+      text.setAttribute('value', label);
+      text.setAttribute('position', '0 0.85 0');
+      text.setAttribute('align', 'center');
+      text.setAttribute('color', '#e7ecef');
+      text.setAttribute('width', '3.5');
+      text.setAttribute('scale', '1.2 1.2 1.2');
+      text.setAttribute('material', 'shader: flat; transparent: true');
+      anchor.appendChild(text);
+
+      scene.appendChild(anchor);
+      console.log('[AR] world anchor placed:', label, worldPos.toArray());
+    }
+
     if(markerHiro){
       markerHiro.addEventListener('markerFound', function(){
         setStatus(true);
@@ -452,10 +488,16 @@
           markerHiro.object3D.visible = true;
           markerHiro.object3D.traverse(function(o){ o.visible = true; });
         }
+        // Ставим постоянный якорь только один раз
+        if(!hiroAnchorPlaced){
+          placeWorldAnchor(markerHiro, 'Hiro');
+          hiroAnchorPlaced = true;
+        }
       });
       markerHiro.addEventListener('markerLost', function(){
         setStatus(false);
         console.log('[AR] markerLost');
+        // якорь НЕ убираем — он остаётся в мире
       });
     }
 
