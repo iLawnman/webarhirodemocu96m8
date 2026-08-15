@@ -217,7 +217,7 @@
   <a-assets></a-assets>
 
   <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
-    <a-box position="0 0 0" depth="1" height="1" width="1"
+    <a-box position="0 0 0" depth="0.5" height="0.5" width="0.5"
            material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
     ></a-box>
   </a-marker>
@@ -434,14 +434,15 @@
       pin.setAttribute('width', '0.25');
       pin.setAttribute('height', '0.25');
       pin.setAttribute('depth', '0.25');
-      pin.setAttribute('position', '0 0.15 0');
+      pin.setAttribute('position', '0 0 0');
       pin.setAttribute('material', 'color:#ffcc00; emissive:#aa8800; emissiveIntensity:0.6');
       pin.setAttribute('visible', true);
       anchor.appendChild(pin);
 
       var text = document.createElement('a-text');
       text.setAttribute('value', label);
-      text.setAttribute('position', '0 0.7 0');
+      text.setAttribute('position', '0 0 0');
+      text.setAttribute('rotation', '0 0 0');
       text.setAttribute('align', 'center');
       text.setAttribute('anchor', 'center');
       text.setAttribute('baseline', 'center');
