@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>4 Anchor AR Marker Viewer</title>
+  <title>5 Anchor AR Marker Viewer</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -458,6 +458,19 @@
       console.log('[AR] anchor created on marker:', label);
     }
 
+    // Последняя стабильная world-матрица (пишется пока маркер виден)
+    var lastWorldMatrix = null;
+    var captureTimer = null;
+
+    function captureAnchorMatrix(){
+      if(!hiroAnchor || !hiroAnchor.object3D || hiroAnchorFrozen) return;
+      var THREE = window.THREE || (window.AFRAME && window.AFRAME.THREE);
+      if(!THREE) return;
+      hiroAnchor.object3D.updateMatrixWorld(true);
+      if(!lastWorldMatrix) lastWorldMatrix = new THREE.Matrix4();
+      lastWorldMatrix.copy(hiroAnchor.object3D.matrixWorld);
+    }
+
     function freezeAnchorToWorld(){
       if(!hiroAnchor || hiroAnchorFrozen) return;
       var THREE = window.THREE || (window.AFRAME && window.AFRAME.THREE);
@@ -466,24 +479,43 @@
         return;
       }
 
+      if(captureTimer){
+        clearInterval(captureTimer);
+        captureTimer = null;
+      }
+
+      // Финальный capture на случай, если таймер не успел
+      captureAnchorMatrix();
+
+      var matrix = lastWorldMatrix;
+      if(!matrix){
+        hiroAnchor.object3D.updateMatrixWorld(true);
+        matrix = hiroAnchor.object3D.matrixWorld.clone();
+      }
+
       var worldPos = new THREE.Vector3();
       var worldQuat = new THREE.Quaternion();
       var worldScale = new THREE.Vector3(1, 1, 1);
-      hiroAnchor.object3D.updateMatrixWorld(true);
-      hiroAnchor.object3D.getWorldPosition(worldPos);
-      hiroAnchor.object3D.getWorldQuaternion(worldQuat);
-      hiroAnchor.object3D.getWorldScale(worldScale);
+      matrix.decompose(worldPos, worldQuat, worldScale);
 
-      // Отцепляем в корень сцены ДО того, как AR.js спрячет маркер
-      if(hiroAnchor.parentElement){
-        hiroAnchor.parentElement.removeChild(hiroAnchor);
+      var obj = hiroAnchor.object3D;
+      var sceneObj = scene.object3D;
+
+      // Three.js reparent
+      if(obj.parent) obj.parent.remove(obj);
+      sceneObj.add(obj);
+
+      // DOM reparent
+      if(hiroAnchor.parentElement && hiroAnchor.parentElement !== scene){
+        scene.appendChild(hiroAnchor);
       }
-      scene.appendChild(hiroAnchor);
 
-      hiroAnchor.object3D.position.copy(worldPos);
-      hiroAnchor.object3D.quaternion.copy(worldQuat);
-      hiroAnchor.object3D.scale.copy(worldScale);
-      hiroAnchor.object3D.updateMatrixWorld(true);
+      obj.matrixAutoUpdate = true;
+      obj.position.copy(worldPos);
+      obj.quaternion.copy(worldQuat);
+      obj.scale.copy(worldScale);
+      obj.updateMatrix();
+      obj.updateMatrixWorld(true);
 
       hiroAnchor.setAttribute('position', {
         x: worldPos.x, y: worldPos.y, z: worldPos.z
@@ -491,7 +523,7 @@
 
       forceVisible(hiroAnchor);
       hiroAnchorFrozen = true;
-      console.log('[AR] anchor frozen to world:', worldPos.x.toFixed(3), worldPos.y.toFixed(3), worldPos.z.toFixed(3));
+      console.log('[AR] anchor frozen:', worldPos.x.toFixed(3), worldPos.y.toFixed(3), worldPos.z.toFixed(3));
     }
 
     if(markerHiro){
@@ -503,14 +535,19 @@
           markerHiro.object3D.traverse(function(o){ o.visible = true; });
         }
         createAnchorOnMarker(markerHiro, 'Hiro');
-        // если уже frozen — просто убеждаемся что виден
-        if(hiroAnchorFrozen) forceVisible(hiroAnchor);
+        if(hiroAnchorFrozen){
+          forceVisible(hiroAnchor);
+        } else {
+          // Пока маркер виден — постоянно сохраняем стабильную матрицу
+          captureAnchorMatrix();
+          if(captureTimer) clearInterval(captureTimer);
+          captureTimer = setInterval(captureAnchorMatrix, 100);
+        }
       });
       markerHiro.addEventListener('markerLost', function(){
         setStatus(false);
         console.log('[AR] markerLost');
         freezeAnchorToWorld();
-        // на всякий случай ещё раз показать после freeze
         setTimeout(function(){ forceVisible(hiroAnchor); }, 0);
         setTimeout(function(){ forceVisible(hiroAnchor); }, 100);
       });
