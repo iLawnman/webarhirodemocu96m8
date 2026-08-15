@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>T1 onscreen debug AR Marker — распознавание и куб</title>
+  <title>hiro AR Marker — распознавание и куб</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -91,26 +91,38 @@
     .hint{font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.5;}
     .hint b{color:var(--text);font-weight:600;}
 
-    a-scene{position:fixed;inset:0;}
+    /* Force a-scene itself to own the full viewport so A-Frame/AR.js
+       don't size the WebGL canvas from a collapsed parent. */
+    a-scene{
+      position:fixed !important;
+      top:0 !important; left:0 !important; right:0 !important; bottom:0 !important;
+      width:100% !important; height:100% !important;
+      max-width:none !important; max-height:none !important;
+    }
 
     /* AR.js injects a raw <video> (camera feed) and a three.js <canvas> as
        independent elements and repositions/resizes them with its own inline
        styles. On some mobile browsers this recalculation runs again ~1s after
        load (e.g. once the address bar collapses) and can compute a wrong,
-       collapsed size, making the feed shrink to a sliver and vanish. Pinning
-       both to the full viewport with !important always wins over AR.js's
-       inline styles and prevents that. object-fit:cover keeps the picture
-       filling the screen regardless of the internal capture resolution. */
+       collapsed size — often leaving only a strip of the 3D layer visible
+       at the bottom. Pin both to the full viewport with !important and use
+       dvh where available so the dynamic browser chrome is accounted for. */
     video{
       position:fixed !important; top:0 !important; left:0 !important;
-      width:100vw !important; height:100vh !important;
+      width:100vw !important; height:100vh !important; height:100dvh !important;
+      max-width:none !important; max-height:none !important;
       object-fit:cover !important; z-index:0 !important;
+      margin:0 !important; padding:0 !important;
     }
     a-scene canvas, canvas.a-canvas{
       position:fixed !important; top:0 !important; left:0 !important;
-      width:100vw !important; height:100vh !important;
+      width:100vw !important; height:100vh !important; height:100dvh !important;
+      max-width:none !important; max-height:none !important;
       z-index:1 !important; background:transparent !important;
-    }  /* AR.js's own debug overlay (small black&white canvas with corner markers
+      margin:0 !important; padding:0 !important;
+      display:block !important;
+    }
+    /* AR.js's own debug overlay (small black&white canvas with corner markers
      around recognised squares) is created only when debugUIEnabled is set
      at scene init - toggling it later isn't reliably picked up. We always
      enable it at init and just show/hide it ourselves via CSS, positioned
@@ -271,18 +283,18 @@
   <a-assets></a-assets>
 
   <!-- preset="hiro" works without a local .patt; url= is also kept as fallback -->
-  <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/markerT1.patt" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
+  <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
     <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"
            animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">
     </a-box>
   </a-marker>
 
   <!-- No url until user selects a .patt — empty url causes "Pattern Data read error /marker_1" -->
-  <!--  <a-marker id="markerCustom" type="pattern" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" visible="false">-->
-  <!--    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"-->
-  <!--           animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">-->
-  <!--    </a-box>-->
-  <!--  </a-marker>-->
+<!--  <a-marker id="markerCustom" type="pattern" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" visible="false">-->
+<!--    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"-->
+<!--           animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">-->
+<!--    </a-box>-->
+<!--  </a-marker>-->
 
   <a-entity camera></a-entity>
 </a-scene>
@@ -425,15 +437,65 @@
       }
     }, 2000);
 
-    // Mobile browsers often collapse the address bar ~1s after load, which
-    // changes window.innerHeight and makes AR.js recompute video/canvas size.
-    // Re-firing 'resize' after things settle nudges AR.js to redo that
-    // calculation against the final viewport instead of a transient one.
-    function nudgeResize(){ window.dispatchEvent(new Event('resize')); }
-    [400, 1000, 2000].forEach(function(ms){ setTimeout(nudgeResize, ms); });
+    // Force video + WebGL canvas to fill the real viewport. AR.js often
+    // resizes them based on a transient/wrong height (address bar, safe areas)
+    // which leaves the 3D layer as a thin strip at the bottom of the screen.
+    function forceFullscreen(){
+      var w = window.innerWidth;
+      var h = window.innerHeight;
+      var video = document.querySelector('video');
+      var canvas = document.querySelector('canvas.a-canvas') || document.querySelector('a-scene canvas');
+      var sceneEl = document.getElementById('scene');
+
+      if(video){
+        video.style.setProperty('position', 'fixed', 'important');
+        video.style.setProperty('top', '0', 'important');
+        video.style.setProperty('left', '0', 'important');
+        video.style.setProperty('width', w + 'px', 'important');
+        video.style.setProperty('height', h + 'px', 'important');
+        video.style.setProperty('object-fit', 'cover', 'important');
+        video.style.setProperty('z-index', '0', 'important');
+      }
+      if(canvas){
+        canvas.style.setProperty('position', 'fixed', 'important');
+        canvas.style.setProperty('top', '0', 'important');
+        canvas.style.setProperty('left', '0', 'important');
+        canvas.style.setProperty('width', w + 'px', 'important');
+        canvas.style.setProperty('height', h + 'px', 'important');
+        canvas.style.setProperty('z-index', '1', 'important');
+        canvas.style.setProperty('display', 'block', 'important');
+      }
+      if(sceneEl){
+        sceneEl.style.setProperty('width', w + 'px', 'important');
+        sceneEl.style.setProperty('height', h + 'px', 'important');
+        // Ask A-Frame to recompute camera aspect / renderer size
+        try{
+          if(sceneEl.resize) sceneEl.resize();
+          if(sceneEl.renderer && sceneEl.renderer.setSize){
+            sceneEl.renderer.setSize(w, h, false);
+          }
+          if(sceneEl.camera){
+            sceneEl.camera.aspect = w / h;
+            sceneEl.camera.updateProjectionMatrix();
+          }
+        }catch(err){
+          console.warn('forceFullscreen A-Frame resize:', err.message);
+        }
+      }
+      window.dispatchEvent(new Event('resize'));
+      console.log('forceFullscreen:', w + 'x' + h,
+        'canvas=', canvas ? (canvas.clientWidth + 'x' + canvas.clientHeight) : 'none',
+        'video=', video ? (video.clientWidth + 'x' + video.clientHeight) : 'none');
+    }
+    [300, 800, 1500, 3000].forEach(function(ms){ setTimeout(forceFullscreen, ms); });
+    window.addEventListener('resize', function(){ setTimeout(forceFullscreen, 50); });
     window.addEventListener('orientationchange', function(){
-      setTimeout(nudgeResize, 300);
+      setTimeout(forceFullscreen, 300);
+      setTimeout(forceFullscreen, 800);
     });
+    scene.addEventListener('loaded', function(){ setTimeout(forceFullscreen, 100); });
+    scene.addEventListener('renderstart', function(){ setTimeout(forceFullscreen, 100); });
+    scene.addEventListener('arjs-video-loaded', function(){ setTimeout(forceFullscreen, 100); });
 
     function setStatus(found){
       if(found){
