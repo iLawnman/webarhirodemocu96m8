@@ -1,83 +1,242 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
-  <title>AR — Step 2 (якорь + waitingAnswer)</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>AR Marker — распознавание и куб</title>
 
-  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/gh/AR-js-org/AR.js@3.4.5/three.js/build/ar-threex.js"></script>
+<script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+<script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
 
-  <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
-    html, body {
-      width: 100%; height: 100%;
-      overflow: hidden; background: #000;
-      font-family: system-ui, -apple-system, sans-serif;
-    }
-    video {
-      position: fixed !important; top: 0 !important; left: 0 !important;
-      width: 100% !important; height: 100% !important;
-      object-fit: cover !important; z-index: 0 !important;
-    }
-    canvas {
-      position: fixed !important; top: 0 !important; left: 0 !important;
-      width: 100% !important; height: 100% !important; z-index: 1 !important;
-    }
-    #loader {
-      position: fixed; inset: 0;
-      display: flex; align-items: center; justify-content: center;
-      background: #111; color: #fff; z-index: 20; font-size: 18px;
-    }
-    #status {
-      position: fixed; top: 12px; right: 12px; z-index: 100 !important;
-      background: rgba(0,0,0,0.75); color: #fff;
-      padding: 10px 14px; border-radius: 10px;
-      font-size: 13px; line-height: 1.55; min-width: 180px;
-      backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-      border: 1px solid rgba(255,255,255,0.2);
-      pointer-events: none; user-select: none;
-    }
-    #status .row { display: flex; justify-content: space-between; gap: 16px; }
-    #status .label { opacity: 0.65; }
-    #status .value { font-weight: 600; }
-    #status .ok { color: #4ade80; }
-    #status .search { color: #fbbf24; }
-    #status .err { color: #f87171; }
+<style>
+  :root{
+    --bg:#0b0d10;
+    --panel:#12161b;
+    --line:#232a31;
+    --accent:#5ee3a5;
+    --accent-dim:#2f7a58;
+    --text:#e7ecef;
+    --text-dim:#8a97a3;
+    --danger:#e35e5e;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;}
 
-    #hint {
-      position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
-      z-index: 100; padding: 10px 18px; border-radius: 20px;
-      background: rgba(0,0,0,0.7); color: #fff; font-size: 14px;
-      pointer-events: none; opacity: 0; transition: opacity 0.25s;
-      border: 1px solid rgba(255,255,255,0.15);
-    }
-    #hint.show { opacity: 1; }
-  </style>
+  .arjs-loader{
+    height:100%;width:100%;position:fixed;inset:0;z-index:9999;
+    background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+  }
+  .arjs-loader .spinner{
+    width:34px;height:34px;border-radius:50%;
+    border:3px solid var(--line);border-top-color:var(--accent);
+    animation:spin 0.9s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+  .arjs-loader p{font-family:var(--mono);font-size:13px;color:var(--text-dim);letter-spacing:.02em;}
+
+  /* top bar */
+  .topbar{
+    position:fixed;top:0;left:0;right:0;z-index:60;
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 16px;
+    background:linear-gradient(180deg, rgba(11,13,16,.92), rgba(11,13,16,0));
+    pointer-events:none;
+  }
+  .brand{display:flex;align-items:center;gap:8px;pointer-events:auto;}
+  .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .brand span{font-family:var(--mono);font-size:13px;letter-spacing:.04em;color:var(--text-dim);}
+
+  .status-pill{
+    pointer-events:auto;
+    font-family:var(--mono);font-size:12px;letter-spacing:.03em;
+    padding:6px 12px;border-radius:20px;
+    background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
+    display:flex;align-items:center;gap:7px;
+    transition:border-color .2s, color .2s;
+  }
+  .status-pill .led{width:7px;height:7px;border-radius:50%;background:var(--text-dim);}
+  .status-pill.found{border-color:var(--accent-dim);color:var(--accent);}
+  .status-pill.found .led{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+
+  /* bottom control panel */
+  .panel{
+    position:fixed;left:0;right:0;bottom:0;z-index:60;
+    padding:14px 16px calc(16px + env(safe-area-inset-bottom));
+    background:linear-gradient(0deg, rgba(11,13,16,.95), rgba(11,13,16,.65) 70%, rgba(11,13,16,0));
+    display:flex;flex-direction:column;gap:10px;
+  }
+  .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .field-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px;display:block;}
+
+  .segmented{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1;min-width:220px;}
+  .segmented button{
+    flex:1;border:0;background:transparent;color:var(--text-dim);
+    padding:9px 10px;font-family:var(--sans);font-size:13px;cursor:pointer;
+    border-right:1px solid var(--line);transition:background .15s,color .15s;
+  }
+  .segmented button:last-child{border-right:0;}
+  .segmented button.active{background:var(--accent);color:#06120c;font-weight:600;}
+
+  .file-btn{
+    position:relative;overflow:hidden;
+    display:flex;align-items:center;gap:8px;
+    background:var(--panel);border:1px solid var(--line);border-radius:10px;
+    padding:9px 14px;font-size:13px;color:var(--text);cursor:pointer;white-space:nowrap;
+  }
+  .file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+  .file-btn.has-file{border-color:var(--accent-dim);color:var(--accent);}
+
+  .hint{font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.5;}
+  .hint b{color:var(--text);font-weight:600;}
+
+  a-scene{position:fixed;inset:0;}
+</style>
 </head>
 <body>
-  <div id="loader">Загрузка камеры…</div>
 
-  <div id="status">
-    <div class="row"><span class="label">Состояние</span><span class="value" id="st-ar">загрузка…</span></div>
-    <div class="row"><span class="label">Маркер</span><span class="value" id="st-marker">—</span></div>
-    <div class="row"><span class="label">FPS</span><span class="value" id="st-fps">—</span></div>
+<div class="topbar">
+  <div class="brand"><span class="dot"></span><span>AR&nbsp;MARKER&nbsp;VIEWER</span></div>
+  <div id="statusPill" class="status-pill"><span class="led"></span><span id="statusText">поиск маркера…</span></div>
+</div>
+
+<div class="panel">
+  <div class="row">
+    <div style="flex:1;min-width:220px;">
+      <span class="field-label">Источник маркера</span>
+      <div class="segmented">
+        <button id="btnHiro" class="active" type="button">Hiro (демо)</button>
+        <button id="btnCustom" type="button">Свой .patt</button>
+      </div>
+    </div>
+    <div id="customFileWrap" style="display:none;">
+      <span class="field-label">Файл</span>
+      <label class="file-btn" id="fileBtn">
+        <span id="fileBtnLabel">Выбрать pattern.patt…</span>
+        <input type="file" id="pattFile" accept=".patt">
+      </label>
+    </div>
   </div>
+  <p class="hint">
+    Наведите камеру на маркер. По умолчанию используется тестовый <b>Hiro</b> маркер AR.js — можно распечатать
+    любую картинку с ним или показать на другом экране. Чтобы использовать собственный маркер, создайте
+    его в <b>editor.html</b>, выберите файл <b>pattern.patt</b> здесь и покажите камере ту же картинку,
+    из которой он был сделан.
+  </p>
+</div>
 
-  <div id="hint">Нажми на картинку</div>
+<div class="arjs-loader" id="loader">
+  <div class="spinner"></div>
+  <p>Инициализация камеры…</p>
+</div>
 
-  <script src="tree.js"></script>
-  <script src="ar.js"></script>
-  <script>
-    setInterval(function () {
-      var hint = document.getElementById('hint');
-      if (!hint) return;
-      if (typeof appState !== 'undefined' && appState === 'waitingAnswer') {
-        hint.classList.add('show');
-      } else {
-        hint.classList.remove('show');
-      }
-    }, 200);
-  </script>
+<a-scene
+  id="scene"
+  vr-mode-ui="enabled: false"
+  renderer="logarithmicDepthBuffer: true; precision: mediump; antialias: true"
+  embedded
+  arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+  loading-screen="enabled: false"
+>
+  <a-assets></a-assets>
+
+  <a-marker id="markerHiro" preset="hiro" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
+    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0">
+      <a-animation attribute="rotation" to="0 405 0" dur="6000" easing="linear" repeat="indefinite"></a-animation>
+    </a-box>
+  </a-marker>
+
+  <a-marker id="markerCustom" type="pattern" url="" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" style="display:none">
+    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0">
+      <a-animation attribute="rotation" to="0 405 0" dur="6000" easing="linear" repeat="indefinite"></a-animation>
+    </a-box>
+  </a-marker>
+
+  <a-entity camera></a-entity>
+</a-scene>
+
+<script>
+(function(){
+  var scene = document.getElementById('scene');
+  var loader = document.getElementById('loader');
+  var statusPill = document.getElementById('statusPill');
+  var statusText = document.getElementById('statusText');
+
+  var markerHiro = document.getElementById('markerHiro');
+  var markerCustom = document.getElementById('markerCustom');
+
+  var btnHiro = document.getElementById('btnHiro');
+  var btnCustom = document.getElementById('btnCustom');
+  var customFileWrap = document.getElementById('customFileWrap');
+  var fileInput = document.getElementById('pattFile');
+  var fileBtn = document.getElementById('fileBtn');
+  var fileBtnLabel = document.getElementById('fileBtnLabel');
+
+  var activeMarker = markerHiro;
+  var customObjectUrl = null;
+
+  scene.addEventListener('loaded', function(){
+    loader.style.display = 'none';
+  });
+  // fallback in case 'loaded' fires before listener attaches / or never fires quickly
+  setTimeout(function(){ loader.style.display = 'none'; }, 4000);
+
+  function setStatus(found){
+    if(found){
+      statusPill.classList.add('found');
+      statusText.textContent = 'маркер найден';
+    } else {
+      statusPill.classList.remove('found');
+      statusText.textContent = 'поиск маркера…';
+    }
+  }
+
+  function bindMarkerEvents(markerEl){
+    markerEl.addEventListener('markerFound', function(){ setStatus(true); });
+    markerEl.addEventListener('markerLost', function(){ setStatus(false); });
+  }
+  bindMarkerEvents(markerHiro);
+  bindMarkerEvents(markerCustom);
+
+  function activate(mode){
+    if(mode === 'hiro'){
+      markerHiro.setAttribute('style','');
+      markerHiro.object3D.visible = true;
+      markerCustom.setAttribute('style','display:none');
+      markerCustom.object3D.visible = false;
+      btnHiro.classList.add('active');
+      btnCustom.classList.remove('active');
+      customFileWrap.style.display = 'none';
+      activeMarker = markerHiro;
+    } else {
+      markerCustom.setAttribute('style','');
+      markerCustom.object3D.visible = true;
+      markerHiro.setAttribute('style','display:none');
+      markerHiro.object3D.visible = false;
+      btnCustom.classList.add('active');
+      btnHiro.classList.remove('active');
+      customFileWrap.style.display = 'block';
+      activeMarker = markerCustom;
+    }
+    setStatus(false);
+  }
+
+  btnHiro.addEventListener('click', function(){ activate('hiro'); });
+  btnCustom.addEventListener('click', function(){ activate('custom'); });
+
+  fileInput.addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    if(customObjectUrl) URL.revokeObjectURL(customObjectUrl);
+    customObjectUrl = URL.createObjectURL(file);
+    markerCustom.setAttribute('url', customObjectUrl);
+    fileBtnLabel.textContent = file.name;
+    fileBtn.classList.add('has-file');
+    activate('custom');
+  });
+})();
+</script>
+
 </body>
 </html>

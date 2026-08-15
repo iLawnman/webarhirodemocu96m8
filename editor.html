@@ -1,0 +1,423 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AR Marker Editor — генератор .patt</title>
+
+<script src="https://raw.githack.com/AR-js-org/Marker-Creator/main/dist/marker-creator.umd.js"></script>
+
+<style>
+  :root{
+    --bg:#0b0d10;
+    --panel:#12161b;
+    --panel-2:#171c22;
+    --line:#232a31;
+    --accent:#5ee3a5;
+    --accent-dim:#2f7a58;
+    --text:#e7ecef;
+    --text-dim:#8a97a3;
+    --danger:#e35e5e;
+    --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+    --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100%;}
+
+  header{
+    padding:22px 24px 18px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;
+  }
+  .brand{display:flex;align-items:center;gap:9px;}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  .brand h1{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:.03em;margin:0;}
+  header p{margin:0;font-family:var(--mono);font-size:11px;color:var(--text-dim);}
+
+  main{
+    max-width:1080px;margin:0 auto;padding:28px 24px 60px;
+    display:grid;grid-template-columns:1fr 1fr;gap:28px;
+  }
+  @media (max-width:860px){ main{grid-template-columns:1fr;} }
+
+  section.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;}
+  .card h2{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin:0 0 16px;font-weight:600;}
+
+  .dropzone{
+    border:1.5px dashed var(--line);border-radius:12px;
+    padding:28px 16px;text-align:center;cursor:pointer;
+    display:flex;flex-direction:column;align-items:center;gap:8px;
+    transition:border-color .15s, background .15s;
+    position:relative;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--accent-dim);background:rgba(94,227,165,.04);}
+  .dropzone input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+  .dropzone .ic{font-size:26px;color:var(--text-dim);}
+  .dropzone .t1{font-size:13px;color:var(--text);}
+  .dropzone .t2{font-family:var(--mono);font-size:11px;color:var(--text-dim);}
+
+  .preview-row{display:flex;gap:14px;align-items:flex-start;margin-top:16px;}
+  .preview-box{
+    flex:1;aspect-ratio:1/1;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
+    display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;
+  }
+  .preview-box canvas{width:100%;height:100%;display:block;}
+  .preview-box .cap{position:absolute;bottom:6px;left:0;right:0;text-align:center;font-family:var(--mono);font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:.06em;}
+  .preview-box.empty::before{content:"нет изображения";font-family:var(--mono);font-size:11px;color:var(--text-dim);}
+
+  .field{margin-bottom:16px;}
+  .field:last-child{margin-bottom:0;}
+  .field-label{display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--text-dim);margin-bottom:8px;}
+  .field-label b{color:var(--accent);font-weight:600;}
+  input[type=range]{
+    -webkit-appearance:none;width:100%;height:4px;border-radius:2px;background:var(--line);outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;width:16px;height:16px;border-radius:50%;background:var(--accent);cursor:pointer;
+    box-shadow:0 0 0 4px rgba(94,227,165,.15);
+  }
+  input[type=color]{
+    -webkit-appearance:none;width:40px;height:32px;border:1px solid var(--line);border-radius:8px;background:none;cursor:pointer;padding:2px;
+  }
+  .color-row{display:flex;align-items:center;gap:10px;}
+  .color-row .swatches{display:flex;gap:6px;}
+  .swatch{width:24px;height:24px;border-radius:6px;border:1px solid var(--line);cursor:pointer;}
+
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    background:var(--accent);color:#06120c;border:0;border-radius:10px;
+    padding:12px 18px;font-size:14px;font-weight:600;cursor:pointer;width:100%;
+    transition:opacity .15s;
+  }
+  .btn:disabled{opacity:.35;cursor:not-allowed;}
+  .btn.secondary{background:var(--panel-2);color:var(--text);border:1px solid var(--line);font-weight:500;}
+  .btn-row{display:flex;gap:10px;margin-top:14px;}
+
+  .status{font-family:var(--mono);font-size:11px;color:var(--text-dim);margin-top:12px;min-height:14px;}
+  .status.err{color:var(--danger);}
+  .status.ok{color:var(--accent);}
+
+  .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px;}
+  .steps li{display:flex;gap:10px;font-size:13px;color:var(--text-dim);line-height:1.5;}
+  .steps li .n{
+    flex:none;width:20px;height:20px;border-radius:50%;background:var(--panel-2);border:1px solid var(--line);
+    display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:10px;color:var(--text);
+  }
+  .steps li b{color:var(--text);}
+
+  code{font-family:var(--mono);background:var(--panel-2);padding:1px 6px;border-radius:5px;font-size:12px;color:var(--accent);}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand"><span class="dot"></span><h1>AR MARKER EDITOR</h1></div>
+  <p>картинка → pattern.patt для AR.js</p>
+</header>
+
+<main>
+
+  <!-- LEFT: upload + settings -->
+  <div style="display:flex;flex-direction:column;gap:20px;">
+
+    <section class="card">
+      <h2>1. Исходное изображение</h2>
+      <label class="dropzone" id="dropzone">
+        <div class="ic">＋</div>
+        <div class="t1">Нажмите или перетащите картинку</div>
+        <div class="t2">JPG / PNG · лучше простой высококонтрастный рисунок</div>
+        <input type="file" id="fileInput" accept="image/*">
+      </label>
+
+      <div class="preview-row">
+        <div class="preview-box empty" id="rawPreviewBox">
+          <canvas id="rawCanvas"></canvas>
+          <span class="cap">исходник</span>
+        </div>
+        <div class="preview-box empty" id="innerPreviewBox">
+          <canvas id="innerCanvas"></canvas>
+          <span class="cap">квадрат (по центру)</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>2. Параметры маркера</h2>
+
+      <div class="field">
+        <div class="field-label"><span>Соотношение узора / рамки</span><b id="ratioVal">50%</b></div>
+        <input type="range" id="ratioSlider" min="10" max="90" value="50">
+      </div>
+
+      <div class="field">
+        <div class="field-label"><span>Размер экспортируемой картинки</span><b id="sizeVal">512px</b></div>
+        <input type="range" id="sizeSlider" min="150" max="2048" step="1" value="512">
+      </div>
+
+      <div class="field">
+        <div class="field-label"><span>Цвет рамки</span></div>
+        <div class="color-row">
+          <input type="color" id="borderColor" value="#000000">
+          <div class="swatches">
+            <div class="swatch" style="background:#000000" data-c="#000000"></div>
+            <div class="swatch" style="background:#ffffff;border-color:#3a4450" data-c="#ffffff"></div>
+            <div class="swatch" style="background:#e35e5e" data-c="#e35e5e"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>3. Как использовать</h2>
+      <ol class="steps">
+        <li><span class="n">1</span><span>Загрузите картинку и настройте рамку — простые контрастные изображения распознаются надёжнее.</span></li>
+        <li><span class="n">2</span><span>Нажмите <b>«Сгенерировать маркер»</b> справа.</span></li>
+        <li><span class="n">3</span><span>Скачайте <code>pattern.patt</code> — это файл распознавания для AR.js.</span></li>
+        <li><span class="n">4</span><span>Скачайте <code>marker.png</code> — это картинка, которую нужно распечатать или показать камере в <code>index.html</code>.</span></li>
+      </ol>
+    </section>
+
+  </div>
+
+  <!-- RIGHT: result -->
+  <div style="display:flex;flex-direction:column;gap:20px;">
+    <section class="card">
+      <h2>Готовый маркер</h2>
+      <div class="preview-box empty" id="markerPreviewBox" style="aspect-ratio:1/1;">
+        <canvas id="markerCanvas"></canvas>
+      </div>
+
+      <button class="btn" id="generateBtn" style="margin-top:16px;" disabled>Сгенерировать маркер</button>
+      <div class="btn-row">
+        <button class="btn secondary" id="downloadPatt" disabled>⬇ pattern.patt</button>
+        <button class="btn secondary" id="downloadImg" disabled>⬇ marker.png</button>
+      </div>
+      <div class="status" id="status"></div>
+    </section>
+
+    <section class="card">
+      <h2>Предпросмотр 16×16</h2>
+      <p style="font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.6;margin:0 0 14px;">
+        Так AR.js «видит» узор внутри рамки. Если на этой сетке два разных ракурса выглядят
+        похоже — распознавание будет путаться, попробуйте более контрастную картинку.
+      </p>
+      <div class="preview-box empty" id="gridPreviewBox" style="aspect-ratio:1/1;">
+        <canvas id="gridCanvas"></canvas>
+      </div>
+    </section>
+  </div>
+
+</main>
+
+<script>
+(function(){
+  var fileInput = document.getElementById('fileInput');
+  var dropzone = document.getElementById('dropzone');
+  var rawCanvas = document.getElementById('rawCanvas');
+  var innerCanvas = document.getElementById('innerCanvas');
+  var markerCanvas = document.getElementById('markerCanvas');
+  var gridCanvas = document.getElementById('gridCanvas');
+
+  var rawPreviewBox = document.getElementById('rawPreviewBox');
+  var innerPreviewBox = document.getElementById('innerPreviewBox');
+  var markerPreviewBox = document.getElementById('markerPreviewBox');
+  var gridPreviewBox = document.getElementById('gridPreviewBox');
+
+  var ratioSlider = document.getElementById('ratioSlider');
+  var ratioVal = document.getElementById('ratioVal');
+  var sizeSlider = document.getElementById('sizeSlider');
+  var sizeVal = document.getElementById('sizeVal');
+  var borderColor = document.getElementById('borderColor');
+  var swatches = document.querySelectorAll('.swatch');
+
+  var generateBtn = document.getElementById('generateBtn');
+  var downloadPatt = document.getElementById('downloadPatt');
+  var downloadImg = document.getElementById('downloadImg');
+  var statusEl = document.getElementById('status');
+
+  var sourceImage = null;      // HTMLImageElement, original upload
+  var innerDataUrl = null;     // square-cropped inner image as data URL (what gets encoded)
+  var patternFileString = null;
+  var markerBlobUrl = null;
+
+  var INNER_EXPORT_SIZE = 512; // resolution of the square inner crop we encode from
+
+  function setStatus(msg, kind){
+    statusEl.textContent = msg || '';
+    statusEl.className = 'status' + (kind ? ' ' + kind : '');
+  }
+
+  // ---------- upload handling ----------
+  ['dragover','dragenter'].forEach(function(ev){
+    dropzone.addEventListener(ev, function(e){ e.preventDefault(); dropzone.classList.add('drag'); });
+  });
+  ['dragleave','drop'].forEach(function(ev){
+    dropzone.addEventListener(ev, function(e){ dropzone.classList.remove('drag'); });
+  });
+  dropzone.addEventListener('drop', function(e){
+    e.preventDefault();
+    var f = e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f) loadFile(f);
+  });
+  fileInput.addEventListener('change', function(e){
+    var f = e.target.files && e.target.files[0];
+    if(f) loadFile(f);
+  });
+
+  function loadFile(file){
+    if(!/^image\//.test(file.type)){
+      setStatus('Файл должен быть изображением', 'err');
+      return;
+    }
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var img = new Image();
+      img.onload = function(){
+        sourceImage = img;
+        drawRaw();
+        drawInner();
+        generateBtn.disabled = false;
+        setStatus('Изображение загружено. Настройте параметры и нажмите «Сгенерировать маркер».');
+      };
+      img.onerror = function(){ setStatus('Не удалось прочитать изображение', 'err'); };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function drawRaw(){
+    if(!sourceImage) return;
+    rawPreviewBox.classList.remove('empty');
+    var size = 400;
+    rawCanvas.width = size; rawCanvas.height = size;
+    var ctx = rawCanvas.getContext('2d');
+    ctx.clearRect(0,0,size,size);
+    var scale = Math.min(size/sourceImage.width, size/sourceImage.height);
+    var w = sourceImage.width*scale, h = sourceImage.height*scale;
+    ctx.fillStyle = '#171c22';
+    ctx.fillRect(0,0,size,size);
+    ctx.drawImage(sourceImage, (size-w)/2, (size-h)/2, w, h);
+  }
+
+  function drawInner(){
+    if(!sourceImage) return;
+    innerPreviewBox.classList.remove('empty');
+    var s = INNER_EXPORT_SIZE;
+    innerCanvas.width = s; innerCanvas.height = s;
+    var ctx = innerCanvas.getContext('2d');
+    var side = Math.min(sourceImage.width, sourceImage.height);
+    var sx = (sourceImage.width - side)/2;
+    var sy = (sourceImage.height - side)/2;
+    ctx.drawImage(sourceImage, sx, sy, side, side, 0, 0, s, s);
+    innerDataUrl = innerCanvas.toDataURL('image/png');
+    drawGridPreview();
+  }
+
+  function drawGridPreview(){
+    if(!innerDataUrl) return;
+    gridPreviewBox.classList.remove('empty');
+    var N = 16;
+    var cell = 20;
+    gridCanvas.width = N*cell; gridCanvas.height = N*cell;
+    var gctx = gridCanvas.getContext('2d');
+    var tmp = document.createElement('canvas');
+    tmp.width = N; tmp.height = N;
+    var tctx = tmp.getContext('2d');
+    tctx.drawImage(innerCanvas, 0, 0, N, N);
+    var data = tctx.getImageData(0,0,N,N).data;
+    for(var y=0;y<N;y++){
+      for(var x=0;x<N;x++){
+        var i = (y*N+x)*4;
+        gctx.fillStyle = 'rgb('+data[i]+','+data[i+1]+','+data[i+2]+')';
+        gctx.fillRect(x*cell, y*cell, cell, cell);
+      }
+    }
+  }
+
+  // ---------- controls ----------
+  ratioSlider.addEventListener('input', function(){
+    ratioVal.textContent = ratioSlider.value + '%';
+  });
+  sizeSlider.addEventListener('input', function(){
+    sizeVal.textContent = sizeSlider.value + 'px';
+  });
+  swatches.forEach(function(sw){
+    sw.addEventListener('click', function(){ borderColor.value = sw.getAttribute('data-c'); });
+  });
+
+  // ---------- marker image compositing ----------
+  function buildMarkerCanvas(){
+    var size = parseInt(sizeSlider.value, 10);
+    var ratio = parseInt(ratioSlider.value, 10) / 100;
+    markerCanvas.width = size;
+    markerCanvas.height = size;
+    var ctx = markerCanvas.getContext('2d');
+    ctx.fillStyle = borderColor.value;
+    ctx.fillRect(0, 0, size, size);
+    var innerSize = size * ratio;
+    var offset = (size - innerSize) / 2;
+    ctx.drawImage(innerCanvas, offset, offset, innerSize, innerSize);
+    markerPreviewBox.classList.remove('empty');
+  }
+
+  // ---------- generate ----------
+  generateBtn.addEventListener('click', function(){
+    if(!innerDataUrl){
+      setStatus('Сначала загрузите изображение', 'err');
+      return;
+    }
+    if(!window.MarkerCreator || !window.MarkerCreator.ArPatternFile){
+      setStatus('Библиотека генерации маркеров не загрузилась. Проверьте подключение к интернету и обновите страницу.', 'err');
+      return;
+    }
+    generateBtn.disabled = true;
+    setStatus('Генерация…');
+
+    buildMarkerCanvas();
+
+    try {
+      window.MarkerCreator.ArPatternFile.encodeImageURL(innerDataUrl, function(patternString){
+        patternFileString = patternString;
+        downloadPatt.disabled = false;
+        downloadImg.disabled = false;
+        generateBtn.disabled = false;
+        setStatus('Готово: pattern.patt и marker.png можно скачивать.', 'ok');
+      });
+    } catch(err){
+      generateBtn.disabled = false;
+      setStatus('Ошибка генерации: ' + err.message, 'err');
+    }
+  });
+
+  downloadPatt.addEventListener('click', function(){
+    if(!patternFileString) return;
+    var blob = new Blob([patternFileString], {type:'text/plain'});
+    triggerDownload(URL.createObjectURL(blob), 'pattern.patt');
+  });
+
+  downloadImg.addEventListener('click', function(){
+    markerCanvas.toBlob(function(blob){
+      if(markerBlobUrl) URL.revokeObjectURL(markerBlobUrl);
+      markerBlobUrl = URL.createObjectURL(blob);
+      triggerDownload(markerBlobUrl, 'marker.png');
+    }, 'image/png');
+  });
+
+  function triggerDownload(url, filename){
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  }
+
+  window.addEventListener('load', function(){
+    if(!window.MarkerCreator || !window.MarkerCreator.ArPatternFile){
+      setStatus('Библиотека генерации маркеров ещё загружается…');
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
