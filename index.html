@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>2 hiro AR Marker — распознавание и куб</title>
+  <title>3 hiro AR Marker — распознавание и куб</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -321,8 +321,10 @@
   <a-assets></a-assets>
 
   <!-- preset="hiro" works without a local .patt; url= is also kept as fallback -->
-  <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
-    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"
+  <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
+    <a-box position="0 0.5 0" depth="1" height="1" width="1"
+           material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4; shader:standard"
+           rotation="0 45 0"
            animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">
     </a-box>
   </a-marker>
@@ -473,9 +475,10 @@
       }
     }, 2000);
 
-    // Force video + WebGL canvas to fill the real viewport. AR.js often
-    // resizes them based on a transient/wrong height (address bar, safe areas)
-    // which leaves the 3D layer as a thin strip at the bottom of the screen.
+    // Only pin CSS size of video/canvas. Do NOT touch camera.projectionMatrix
+    // or renderer.setSize — AR.js owns those so the 3D content lines up with
+    // the tracked marker. Overwriting the projection is why markerFound can
+    // fire while the cube stays invisible / off-screen.
     var lastFsKey = '';
     function forceFullscreen(){
       var w = window.innerWidth;
@@ -505,16 +508,6 @@
       if(sceneEl){
         sceneEl.style.setProperty('width', w + 'px', 'important');
         sceneEl.style.setProperty('height', h + 'px', 'important');
-        try{
-          if(sceneEl.resize) sceneEl.resize();
-          if(sceneEl.renderer && sceneEl.renderer.setSize){
-            sceneEl.renderer.setSize(w, h, false);
-          }
-          if(sceneEl.camera){
-            sceneEl.camera.aspect = w / h;
-            sceneEl.camera.updateProjectionMatrix();
-          }
-        }catch(err){ /* silent */ }
       }
       window.dispatchEvent(new Event('resize'));
       var key = w + 'x' + h;
@@ -530,7 +523,6 @@
       setTimeout(forceFullscreen, 800);
     });
     scene.addEventListener('loaded', function(){ setTimeout(forceFullscreen, 100); });
-    scene.addEventListener('renderstart', function(){ setTimeout(forceFullscreen, 100); });
     scene.addEventListener('arjs-video-loaded', function(){ setTimeout(forceFullscreen, 100); });
 
     function setStatus(found){
@@ -544,9 +536,15 @@
     }
 
     function bindMarkerEvents(markerEl, label){
+      if(!markerEl) return;
       markerEl.addEventListener('markerFound', function(){
         setStatus(true);
         console.log('[AR] markerFound:', label);
+        // Ensure child content is visible in three.js when tracking starts
+        if(markerEl.object3D){
+          markerEl.object3D.visible = true;
+          markerEl.object3D.traverse(function(obj){ obj.visible = true; });
+        }
       });
       markerEl.addEventListener('markerLost', function(){
         setStatus(false);
@@ -558,16 +556,24 @@
 
     function activate(mode){
       if(mode === 'hiro'){
-        markerHiro.setAttribute('visible', 'true');
-        if(markerHiro.object3D) markerHiro.object3D.visible = true;
-        markerCustom.setAttribute('visible', 'false');
-        if(markerCustom.object3D) markerCustom.object3D.visible = false;
+        if(markerHiro){
+          markerHiro.setAttribute('visible', 'true');
+          if(markerHiro.object3D) markerHiro.object3D.visible = true;
+        }
+        if(markerCustom){
+          markerCustom.setAttribute('visible', 'false');
+          if(markerCustom.object3D) markerCustom.object3D.visible = false;
+        }
         btnHiro.classList.add('active');
         btnCustom.classList.remove('active');
         customFileWrap.style.display = 'none';
         activeMarker = markerHiro;
         checkPattern('assets/hiro.patt', 'assets/hiro.patt');
       } else {
+        if(!markerCustom){
+          console.warn('Кастомный маркер отключён в HTML');
+          return;
+        }
         // Only enable custom marker after a .patt has been chosen
         if(!customObjectUrl){
           console.warn('Сначала выберите .patt файл');
@@ -578,8 +584,10 @@
         }
         markerCustom.setAttribute('visible', 'true');
         if(markerCustom.object3D) markerCustom.object3D.visible = true;
-        markerHiro.setAttribute('visible', 'false');
-        if(markerHiro.object3D) markerHiro.object3D.visible = false;
+        if(markerHiro){
+          markerHiro.setAttribute('visible', 'false');
+          if(markerHiro.object3D) markerHiro.object3D.visible = false;
+        }
         btnCustom.classList.add('active');
         btnHiro.classList.remove('active');
         customFileWrap.style.display = 'block';
@@ -595,6 +603,10 @@
     fileInput.addEventListener('change', function(e){
       var file = e.target.files && e.target.files[0];
       if(!file) return;
+      if(!markerCustom){
+        console.warn('Кастомный маркер отключён в HTML');
+        return;
+      }
       if(customObjectUrl) URL.revokeObjectURL(customObjectUrl);
       customObjectUrl = URL.createObjectURL(file);
       // Must set url BEFORE making the marker visible, otherwise AR.js
