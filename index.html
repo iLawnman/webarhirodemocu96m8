@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>4 hiro AR Marker — распознавание и куб</title>
+  <title>AR Marker Viewer</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -18,292 +18,214 @@
       --text:#e7ecef;
       --text-dim:#8a97a3;
       --danger:#e35e5e;
-      --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
-      --sans: "Inter", -apple-system, "Segoe UI", sans-serif;
+      --mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
+      --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
     }
     *{box-sizing:border-box;}
     html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;}
 
     .arjs-loader{
-      height:100%;width:100%;position:fixed;inset:0;z-index:9999;
-      background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:14px;
+      position:fixed;inset:0;z-index:9999;background:var(--bg);
+      display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;
     }
     .arjs-loader .spinner{
-      width:34px;height:34px;border-radius:50%;
+      width:28px;height:28px;border-radius:50%;
       border:3px solid var(--line);border-top-color:var(--accent);
-      animation:spin 0.9s linear infinite;
+      animation:spin .9s linear infinite;
     }
     @keyframes spin{to{transform:rotate(360deg);}}
-    .arjs-loader p{font-family:var(--mono);font-size:13px;color:var(--text-dim);letter-spacing:.02em;}
+    .arjs-loader p{font-family:var(--mono);font-size:12px;color:var(--text-dim);}
 
-    /* top bar */
-    .topbar{
-      position:fixed;top:0;left:0;right:0;z-index:60;
-      display:flex;align-items:center;justify-content:space-between;
-      padding:12px 16px;
-      background:linear-gradient(180deg, rgba(11,13,16,.92), rgba(11,13,16,0));
-      pointer-events:none;
-      transition:opacity .2s, transform .2s;
+    /* —— compact chrome —— */
+    .chrome{
+      position:fixed;left:0;right:0;bottom:0;z-index:60;
+      padding:10px 12px calc(10px + env(safe-area-inset-bottom));
+      background:linear-gradient(0deg,rgba(11,13,16,.92),rgba(11,13,16,.55) 75%,transparent);
+      display:flex;flex-direction:column;gap:8px;
+      transition:opacity .2s,transform .2s;
     }
-    .brand{display:flex;align-items:center;gap:8px;pointer-events:auto;}
-    .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
-    .brand span{font-family:var(--mono);font-size:13px;letter-spacing:.04em;color:var(--text-dim);}
+    body.ui-hidden .chrome{opacity:0;pointer-events:none;transform:translateY(16px);}
+
+    .chrome-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
 
     .status-pill{
-      pointer-events:auto;
-      font-family:var(--mono);font-size:12px;letter-spacing:.03em;
-      padding:6px 12px;border-radius:20px;
+      font-family:var(--mono);font-size:11px;
+      padding:6px 10px;border-radius:16px;
       background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
-      display:flex;align-items:center;gap:7px;
-      transition:border-color .2s, color .2s;
+      display:flex;align-items:center;gap:6px;white-space:nowrap;
     }
-    .status-pill .led{width:7px;height:7px;border-radius:50%;background:var(--text-dim);}
+    .status-pill .led{width:6px;height:6px;border-radius:50%;background:var(--text-dim);}
     .status-pill.found{border-color:var(--accent-dim);color:var(--accent);}
     .status-pill.found .led{background:var(--accent);box-shadow:0 0 6px var(--accent);}
 
-    /* bottom control panel */
-    .panel{
-      position:fixed;left:0;right:0;bottom:0;z-index:60;
-      padding:14px 16px calc(16px + env(safe-area-inset-bottom));
-      background:linear-gradient(0deg, rgba(11,13,16,.95), rgba(11,13,16,.65) 70%, rgba(11,13,16,0));
-      display:flex;flex-direction:column;gap:10px;
-      transition:opacity .2s, transform .2s;
+    .seg{
+      display:flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;
     }
-
-    /* Hide chrome UI (top + bottom). Log panel stays independently collapsible. */
-    body.ui-hidden .topbar,
-    body.ui-hidden .panel{
-      opacity:0;
-      pointer-events:none;
-      transform:translateY(-8px);
+    .seg button{
+      border:0;background:transparent;color:var(--text-dim);
+      padding:7px 10px;font-size:12px;cursor:pointer;
+      border-right:1px solid var(--line);
     }
-    body.ui-hidden .panel{ transform:translateY(12px); }
+    .seg button:last-child{border-right:0;}
+    .seg button.active{background:var(--accent);color:#06120c;font-weight:600;}
 
-    /* Always-visible floating control to restore / hide UI */
-    #uiToggle{
-      position:fixed;
-      bottom:calc(16px + env(safe-area-inset-bottom));
-      left:16px;
-      z-index:90;
-      font-family:var(--mono); font-size:11px; letter-spacing:.04em;
-      color:var(--text);
-      background:rgba(18,22,27,.9);
-      border:1px solid var(--line);
-      border-radius:10px;
-      padding:9px 12px;
-      cursor:pointer;
+    .chip{
+      font-family:var(--mono);font-size:11px;color:var(--text-dim);
+      background:var(--panel);border:1px solid var(--line);border-radius:8px;
+      padding:7px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;
       -webkit-tap-highlight-color:transparent;
-      transition:border-color .15s, color .15s, background .15s;
     }
-    #uiToggle:hover, #uiToggle:active{
-      border-color:var(--accent-dim);
-      color:var(--accent);
-    }
-    body.ui-hidden #uiToggle{
-      border-color:var(--accent-dim);
-      color:var(--accent);
-    }
-    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-    .field-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px;display:block;}
-
-    .segmented{display:flex;background:var(--panel);border:1px solid var(--line);border-radius:10px;overflow:hidden;flex:1;min-width:220px;}
-    .segmented button{
-      flex:1;border:0;background:transparent;color:var(--text-dim);
-      padding:9px 10px;font-family:var(--sans);font-size:13px;cursor:pointer;
-      border-right:1px solid var(--line);transition:background .15s,color .15s;
-    }
-    .segmented button:last-child{border-right:0;}
-    .segmented button.active{background:var(--accent);color:#06120c;font-weight:600;}
+    .chip input{margin:0;}
+    .chip.on{border-color:var(--accent-dim);color:var(--accent);}
 
     .file-btn{
       position:relative;overflow:hidden;
-      display:flex;align-items:center;gap:8px;
-      background:var(--panel);border:1px solid var(--line);border-radius:10px;
-      padding:9px 14px;font-size:13px;color:var(--text);cursor:pointer;white-space:nowrap;
+      font-size:12px;color:var(--text);
+      background:var(--panel);border:1px solid var(--line);border-radius:8px;
+      padding:7px 10px;cursor:pointer;white-space:nowrap;
     }
     .file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;}
     .file-btn.has-file{border-color:var(--accent-dim);color:var(--accent);}
+    #customFileWrap{display:none;}
 
-    .hint{font-family:var(--mono);font-size:11px;color:var(--text-dim);line-height:1.5;}
-    .hint b{color:var(--text);font-weight:600;}
+    #diagStatus{font-family:var(--mono);font-size:10px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
-    /* Force a-scene itself to own the full viewport so A-Frame/AR.js
-       don't size the WebGL canvas from a collapsed parent. */
-    a-scene{
-      position:fixed !important;
-      top:0 !important; left:0 !important; right:0 !important; bottom:0 !important;
-      width:100% !important; height:100% !important;
-      max-width:none !important; max-height:none !important;
+    #uiToggle{
+      position:fixed;bottom:calc(10px + env(safe-area-inset-bottom));left:12px;z-index:90;
+      font-family:var(--mono);font-size:11px;color:var(--text);
+      background:rgba(18,22,27,.92);border:1px solid var(--line);border-radius:8px;
+      padding:8px 10px;cursor:pointer;
     }
+    body.ui-hidden #uiToggle{border-color:var(--accent-dim);color:var(--accent);}
 
-    /* AR.js injects a raw <video> (camera feed) and a three.js <canvas> as
-       independent elements and repositions/resizes them with its own inline
-       styles. On some mobile browsers this recalculation runs again ~1s after
-       load (e.g. once the address bar collapses) and can compute a wrong,
-       collapsed size — often leaving only a strip of the 3D layer visible
-       at the bottom. Pin both to the full viewport with !important and use
-       dvh where available so the dynamic browser chrome is accounted for. */
+    /* —— AR layers —— */
+    a-scene{
+      position:fixed !important;inset:0 !important;
+      width:100% !important;height:100% !important;
+      max-width:none !important;max-height:none !important;
+    }
     video{
-      position:fixed !important; top:0 !important; left:0 !important;
-      width:100vw !important; height:100vh !important; height:100dvh !important;
-      max-width:none !important; max-height:none !important;
-      object-fit:cover !important; z-index:0 !important;
-      margin:0 !important; padding:0 !important;
+      position:fixed !important;top:0 !important;left:0 !important;
+      width:100vw !important;height:100vh !important;height:100dvh !important;
+      object-fit:cover !important;z-index:0 !important;margin:0 !important;padding:0 !important;
     }
     a-scene canvas, canvas.a-canvas{
-      position:fixed !important; top:0 !important; left:0 !important;
-      width:100vw !important; height:100vh !important; height:100dvh !important;
-      max-width:none !important; max-height:none !important;
-      z-index:1 !important; background:transparent !important;
-      margin:0 !important; padding:0 !important;
-      display:block !important;
-    }
-    /* AR.js debug overlay (threshold / corner-marker canvas). Created when
-       debugUIEnabled:true at scene init. AR.js may park it off-screen or under
-       our fullscreen layers — we re-pin it top-left and toggle visibility. */
-    canvas.arjs-debug-ui,
-    canvas:not(.a-canvas){
-      position:fixed !important;
-      top:10px !important; left:10px !important;
-      width:220px !important; height:auto !important;
-      max-width:40vw !important;
-      z-index:85 !important;
-      border:1px solid var(--accent-dim) !important;
-      border-radius:8px !important;
-      background:#000 !important;
-      opacity:0 !important;
-      visibility:hidden !important;
-      pointer-events:none !important;
-      transition:opacity .15s, visibility .15s;
-    }
-    body.show-debug-ui canvas.arjs-debug-ui,
-    body.show-debug-ui canvas:not(.a-canvas){
-      opacity:1 !important;
-      visibility:visible !important;
-      display:block !important;
+      position:fixed !important;top:0 !important;left:0 !important;
+      width:100vw !important;height:100vh !important;height:100dvh !important;
+      z-index:1 !important;background:transparent !important;display:block !important;
+      margin:0 !important;padding:0 !important;
     }
 
-    /* On-screen console for devices without devtools access (tablets, phones).
-       Mirrors console.log/warn/error and uncaught errors into a scrollable,
-       semi-transparent panel on the right so nothing is silent.
-       Collapses to the right leaving a vertical "ear" (handle) to reopen. */
+    /* Our own marker frame overlay (always under our control) */
+    #markerFrame{
+      position:fixed;inset:0;z-index:2;pointer-events:none;
+      display:none;
+    }
+    #markerFrame.on{display:block;}
+    #markerFrame .box{
+      position:absolute;left:50%;top:50%;
+      width:min(42vw,180px);height:min(42vw,180px);
+      transform:translate(-50%,-50%);
+      border:2px solid var(--accent);
+      box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 0 18px rgba(94,227,165,.35);
+      border-radius:4px;
+      opacity:.85;
+    }
+    #markerFrame .box::before,#markerFrame .box::after{
+      content:"";position:absolute;width:18px;height:18px;border:3px solid var(--accent);
+    }
+    #markerFrame .box::before{top:-3px;left:-3px;border-right:0;border-bottom:0;}
+    #markerFrame .box::after{bottom:-3px;right:-3px;border-left:0;border-top:0;}
+    #markerFrame.found .box{border-color:#fff;box-shadow:0 0 22px rgba(94,227,165,.7);}
+
+    /* AR.js native debug canvas — pinned top-left when present */
+    canvas.arjs-debug-ui{
+      position:fixed !important;
+      top:8px !important;left:8px !important;
+      width:160px !important;height:120px !important;
+      z-index:80 !important;
+      border:1px solid var(--accent-dim) !important;
+      border-radius:6px !important;
+      background:#000 !important;
+      object-fit:contain !important;
+      pointer-events:none !important;
+    }
+    body:not(.show-arjs-debug) canvas.arjs-debug-ui{display:none !important;}
+
+    /* —— log (collapsed by default) —— */
     #logPanel{
-      position:fixed; top:0; right:0; bottom:0; z-index:200;
-      width:min(78vw, 320px);
-      background:rgba(10,12,15,.82);
-      backdrop-filter:blur(2px);
+      position:fixed;top:0;right:0;bottom:0;z-index:200;
+      width:min(72vw,300px);
+      background:rgba(10,12,15,.88);
       border-left:1px solid var(--line);
-      display:flex; flex-direction:column;
+      display:flex;flex-direction:column;
       transform:translateX(0);
       transition:transform .25s ease;
     }
-    /* Leave a thin vertical ear visible when collapsed */
-    #logPanel.hidden{
-      transform:translateX(calc(100% - 28px));
-    }
-    /* Vertical ear / handle on the left edge of the panel */
+    #logPanel.hidden{transform:translateX(calc(100% - 26px));}
     #logEar{
-      position:absolute;
-      left:0; top:50%;
-      transform:translate(-100%, -50%);
-      width:28px;
-      min-height:88px;
-      padding:12px 0;
-      display:flex; align-items:center; justify-content:center;
-      background:rgba(10,12,15,.92);
-      border:1px solid var(--line);
-      border-right:0;
-      border-radius:10px 0 0 10px;
-      cursor:pointer;
-      z-index:1;
-      -webkit-tap-highlight-color:transparent;
-      transition:background .15s, border-color .15s;
-    }
-    #logEar:hover, #logEar:active{
-      background:var(--panel);
-      border-color:var(--accent-dim);
+      position:absolute;left:0;top:50%;transform:translate(-100%,-50%);
+      width:26px;min-height:72px;padding:10px 0;
+      display:flex;align-items:center;justify-content:center;
+      background:rgba(10,12,15,.92);border:1px solid var(--line);border-right:0;
+      border-radius:8px 0 0 8px;cursor:pointer;
     }
     #logEar span{
-      writing-mode:vertical-rl;
-      text-orientation:mixed;
-      transform:rotate(180deg);
-      font-family:var(--mono); font-size:11px; letter-spacing:.12em;
-      color:var(--text-dim);
-      user-select:none;
+      writing-mode:vertical-rl;transform:rotate(180deg);
+      font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--text-dim);
     }
-    #logPanel:not(.hidden) #logEar span{ color:var(--accent); }
+    #logPanel:not(.hidden) #logEar span{color:var(--accent);}
     #logPanelHead{
-      flex:none; display:flex; align-items:center; justify-content:space-between;
-      padding:10px 10px; border-bottom:1px solid var(--line);
-      font-family:var(--mono); font-size:11px; color:var(--text-dim); letter-spacing:.05em;
+      flex:none;display:flex;align-items:center;justify-content:space-between;
+      padding:8px 10px;border-bottom:1px solid var(--line);
+      font-family:var(--mono);font-size:11px;color:var(--text-dim);
     }
     #logPanelHead button{
-      font-family:var(--mono); font-size:11px; color:var(--text);
-      background:var(--panel); border:1px solid var(--line); border-radius:6px;
-      padding:4px 8px; cursor:pointer;
+      font-family:var(--mono);font-size:11px;color:var(--text);
+      background:var(--panel);border:1px solid var(--line);border-radius:6px;
+      padding:3px 8px;cursor:pointer;
     }
-    #logList{
-      flex:1; overflow-y:auto; padding:8px 10px 10px;
-      font-family:var(--mono); font-size:10.5px; line-height:1.45;
-    }
-    #logList .entry{ margin-bottom:6px; white-space:pre-wrap; word-break:break-word; }
-    #logList .t{ color:var(--text-dim); }
-    #logList .lvl-info{ color:var(--text); }
-    #logList .lvl-warn{ color:#e3c15e; }
-    #logList .lvl-error{ color:var(--danger); }
-    #logList .lvl-event{ color:var(--accent); }
+    #logList{flex:1;overflow-y:auto;padding:8px 10px;font-family:var(--mono);font-size:10px;line-height:1.4;}
+    #logList .entry{margin-bottom:5px;white-space:pre-wrap;word-break:break-word;}
+    #logList .t{color:var(--text-dim);}
+    #logList .lvl-info{color:var(--text);}
+    #logList .lvl-warn{color:#e3c15e;}
+    #logList .lvl-error{color:var(--danger);}
   </style>
 </head>
-<body class="show-debug-ui">
+<body class="show-arjs-debug">
 
-<div class="topbar">
-  <div class="brand"><span class="dot"></span><span>AR&nbsp;MARKER&nbsp;VIEWER</span></div>
-  <div id="statusPill" class="status-pill"><span class="led"></span><span id="statusText">поиск маркера…</span></div>
-</div>
-
-<div class="panel">
-  <div class="row">
-    <div style="flex:1;min-width:220px;">
-      <span class="field-label">Источник маркера</span>
-      <div class="segmented">
-        <button id="btnHiro" class="active" type="button">Hiro (assets/hiro.patt)</button>
-        <button id="btnCustom" type="button">Свой .patt</button>
-      </div>
+<div class="chrome" id="chrome">
+  <div class="chrome-row">
+    <div id="statusPill" class="status-pill"><span class="led"></span><span id="statusText">поиск…</span></div>
+    <div class="seg">
+      <button id="btnHiro" class="active" type="button">Hiro</button>
+      <button id="btnCustom" type="button">Свой</button>
     </div>
-    <div id="customFileWrap" style="display:none;">
-      <span class="field-label">Файл</span>
+    <div id="customFileWrap">
       <label class="file-btn" id="fileBtn">
-        <span id="fileBtnLabel">Выбрать pattern.patt…</span>
+        <span id="fileBtnLabel">.patt…</span>
         <input type="file" id="pattFile" accept=".patt">
       </label>
     </div>
-  </div>
-  <p class="hint">
-    Наведите камеру на маркер. По умолчанию используется тестовый <b>Hiro</b> маркер, паттерн которого
-    читается из локального файла <b>assets/hiro.patt</b> (лежит рядом с этой страницей) — распечатайте
-    картинку с ним или покажите на другом экране. Чтобы использовать собственный маркер, создайте
-    его в <b>editor.html</b>, выберите файл <b>pattern.patt</b> здесь и покажите камере ту же картинку,
-    из которой он был сделан.
-  </p>
-  <div class="row" style="justify-content:space-between;">
-    <label style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--text-dim);cursor:pointer;">
-      <input type="checkbox" id="debugToggle" checked> показать рамки распознавания AR.js
+    <label class="chip on" id="debugChip">
+      <input type="checkbox" id="debugToggle" checked> рамки
     </label>
-    <span id="diagStatus" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
+    <span id="diagStatus"></span>
   </div>
 </div>
 
-<button id="uiToggle" type="button" title="Скрыть / показать интерфейс">UI скрыть</button>
+<button id="uiToggle" type="button">UI</button>
 
 <div class="arjs-loader" id="loader">
   <div class="spinner"></div>
-  <p>Инициализация камеры…</p>
+  <p>Камера…</p>
 </div>
 
+<div id="markerFrame"><div class="box"></div></div>
+
 <div id="logPanel" class="hidden">
-  <button id="logEar" type="button" title="Свернуть / раскрыть лог" aria-label="Свернуть или раскрыть лог">
-    <span>ЛОГ</span>
-  </button>
+  <button id="logEar" type="button" title="Лог"><span>ЛОГ</span></button>
   <div id="logPanelHead">
     <span>ЛОГ</span>
     <div style="display:flex;gap:6px;">
@@ -315,356 +237,250 @@
 </div>
 
 <a-scene
-        id="scene"
-        vr-mode-ui="enabled: false"
-        renderer="logarithmicDepthBuffer: true; precision: mediump; antialias: true; alpha: true"
-        embedded
-        arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-        loading-screen="enabled: false"
+  id="scene"
+  vr-mode-ui="enabled: false"
+  renderer="logarithmicDepthBuffer: true; precision: mediump; antialias: true; alpha: true"
+  embedded
+  arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+  loading-screen="enabled: false"
 >
   <a-assets></a-assets>
 
-  <!-- preset="hiro" works without a local .patt; url= is also kept as fallback -->
   <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
     <a-box position="0 0.5 0" depth="1" height="1" width="1"
-           material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4; shader:standard"
+           material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
            rotation="0 45 0"
            animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">
     </a-box>
   </a-marker>
 
-  <!-- No url until user selects a .patt — empty url causes "Pattern Data read error /marker_1" -->
-  <!--  <a-marker id="markerCustom" type="pattern" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" visible="false">-->
-  <!--    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"-->
-  <!--           animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">-->
-  <!--    </a-box>-->
-  <!--  </a-marker>-->
-
   <a-entity camera></a-entity>
 </a-scene>
 
 <script>
-  (function(){
-    // ---- on-screen console (for devices without devtools access) ----
-    var logList = document.getElementById('logList');
-    var logPanel = document.getElementById('logPanel');
-    var logHideBtn = document.getElementById('logHideBtn');
-    var logEar = document.getElementById('logEar');
-    var logClearBtn = document.getElementById('logClearBtn');
-    var logCount = 0;
+(function(){
+  var logList = document.getElementById('logList');
+  var logPanel = document.getElementById('logPanel');
+  var logHideBtn = document.getElementById('logHideBtn');
+  var logEar = document.getElementById('logEar');
+  var logClearBtn = document.getElementById('logClearBtn');
+  var logCount = 0;
 
-    function pad(n){ return n < 10 ? '0'+n : ''+n; }
-    function timeStr(){
-      var d = new Date();
-      return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  function pad(n){ return n < 10 ? '0'+n : ''+n; }
+  function timeStr(){
+    var d = new Date();
+    return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  }
+  function stringifyArg(a){
+    if(a instanceof Error) return a.message;
+    if(typeof a === 'object'){
+      try { return JSON.stringify(a); } catch(e){ return String(a); }
     }
-    function stringifyArg(a){
-      if(a instanceof Error) return a.message;
-      if(typeof a === 'object'){
-        try { return JSON.stringify(a); } catch(e){ return String(a); }
-      }
-      return String(a);
-    }
-    function logToPanel(level, args){
-      logCount++;
-      var line = document.createElement('div');
-      line.className = 'entry';
-      var msg = Array.prototype.map.call(args, stringifyArg).join(' ');
-      line.innerHTML = '<span class="t">['+timeStr()+']</span> <span class="lvl-'+level+'">'+
-              msg.replace(/</g,'&lt;') + '</span>';
-      logList.appendChild(line);
-      logList.scrollTop = logList.scrollHeight;
-      // keep it from growing forever on long sessions
-      if(logCount > 300){ logList.removeChild(logList.firstChild); }
-    }
+    return String(a);
+  }
+  function logToPanel(level, args){
+    logCount++;
+    var line = document.createElement('div');
+    line.className = 'entry';
+    var msg = Array.prototype.map.call(args, stringifyArg).join(' ');
+    line.innerHTML = '<span class="t">['+timeStr()+']</span> <span class="lvl-'+level+'">'+
+      msg.replace(/</g,'&lt;') + '</span>';
+    logList.appendChild(line);
+    logList.scrollTop = logList.scrollHeight;
+    if(logCount > 200){ logList.removeChild(logList.firstChild); }
+  }
+  ['log','warn','error'].forEach(function(level){
+    var original = console[level];
+    console[level] = function(){
+      logToPanel(level === 'log' ? 'info' : level, arguments);
+      original.apply(console, arguments);
+    };
+  });
+  window.addEventListener('error', function(e){
+    logToPanel('error', ['JS: ' + e.message]);
+  });
+  logHideBtn.addEventListener('click', function(){ logPanel.classList.add('hidden'); });
+  logEar.addEventListener('click', function(){ logPanel.classList.toggle('hidden'); });
+  logClearBtn.addEventListener('click', function(){ logList.innerHTML = ''; logCount = 0; });
 
-    ['log','warn','error'].forEach(function(level){
-      var original = console[level];
-      console[level] = function(){
-        logToPanel(level === 'log' ? 'info' : level, arguments);
-        original.apply(console, arguments);
-      };
-    });
-    window.addEventListener('error', function(e){
-      logToPanel('error', ['JS error: ' + e.message + ' (' + (e.filename||'').split('/').pop() + ':' + e.lineno + ')']);
-    });
-    window.addEventListener('unhandledrejection', function(e){
-      logToPanel('error', ['Promise rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)]);
-    });
+  console.log('AR v7 start');
 
-    function toggleLogPanel(){
-      logPanel.classList.toggle('hidden');
-    }
-    logHideBtn.addEventListener('click', function(){ logPanel.classList.add('hidden'); });
-    logEar.addEventListener('click', toggleLogPanel);
-    logClearBtn.addEventListener('click', function(){ logList.innerHTML = ''; logCount = 0; });
+  var scene = document.getElementById('scene');
+  var loader = document.getElementById('loader');
+  var statusPill = document.getElementById('statusPill');
+  var statusText = document.getElementById('statusText');
+  var markerHiro = document.getElementById('markerHiro');
+  var btnHiro = document.getElementById('btnHiro');
+  var btnCustom = document.getElementById('btnCustom');
+  var customFileWrap = document.getElementById('customFileWrap');
+  var fileInput = document.getElementById('pattFile');
+  var fileBtn = document.getElementById('fileBtn');
+  var fileBtnLabel = document.getElementById('fileBtnLabel');
+  var diagStatus = document.getElementById('diagStatus');
+  var debugToggle = document.getElementById('debugToggle');
+  var debugChip = document.getElementById('debugChip');
+  var markerFrame = document.getElementById('markerFrame');
+  var uiToggle = document.getElementById('uiToggle');
+  var customObjectUrl = null;
 
-    console.log('AR page script started');
-
-    // ---- app logic ----
-    var scene = document.getElementById('scene');
-    var loader = document.getElementById('loader');
-    var statusPill = document.getElementById('statusPill');
-    var statusText = document.getElementById('statusText');
-
-    var markerHiro = document.getElementById('markerHiro');
-    var markerCustom = document.getElementById('markerCustom');
-
-    var btnHiro = document.getElementById('btnHiro');
-    var btnCustom = document.getElementById('btnCustom');
-    var customFileWrap = document.getElementById('customFileWrap');
-    var fileInput = document.getElementById('pattFile');
-    var fileBtn = document.getElementById('fileBtn');
-    var fileBtnLabel = document.getElementById('fileBtnLabel');
-
-
-    var activeMarker = markerHiro;
-    var customObjectUrl = null;
-    var diagStatus = document.getElementById('diagStatus');
-    var debugToggle = document.getElementById('debugToggle');
-
-    // Diagnostics: the #1 reason "camera sees the marker but nothing happens"
-    // is that the .patt file never actually loaded (wrong path, file not
-    // uploaded next to index.html, wrong case, etc). AR.js fails silently in
-    // that case - the marker is simply never recognised. Check reachability
-    // ourselves and say so plainly instead of leaving it a mystery.
-    function checkPattern(url, label){
-      if(!url){ diagStatus.textContent = ''; return; }
-      fetch(url, {cache:'no-store'}).then(function(res){
-        if(res.ok){
-          diagStatus.textContent = label + ': файл найден ✓';
-          diagStatus.style.color = 'var(--accent)';
-        } else {
-          diagStatus.textContent = label + ': HTTP ' + res.status + ' — файл не найден по пути "' + url + '"';
-          diagStatus.style.color = 'var(--danger)';
-        }
-      }).catch(function(err){
-        diagStatus.textContent = label + ': не удалось загрузить (' + err.message + '). Открыт ли index.html через http(s), а не напрямую как file://?';
+  function checkPattern(url, label){
+    if(!url){ diagStatus.textContent = ''; return; }
+    fetch(url, {cache:'no-store'}).then(function(res){
+      if(res.ok){
+        diagStatus.textContent = label + ' ✓';
+        diagStatus.style.color = 'var(--accent)';
+      } else {
+        diagStatus.textContent = label + ' HTTP ' + res.status;
         diagStatus.style.color = 'var(--danger)';
-      });
-    }
-    checkPattern('assets/hiro.patt', 'assets/hiro.patt');
-
-    // Surface camera / AR.js source errors instead of failing silently -
-    // e.g. camera permission denied, no camera found, or getUserMedia
-    // blocked because the page isn't served over https/localhost.
-    scene.addEventListener('camera-error', function(e){
-      diagStatus.textContent = 'Ошибка камеры: ' + (e.detail && e.detail.error ? e.detail.error : 'нет доступа к камере. Открыт ли index.html через https:// или http://localhost?');
+      }
+    }).catch(function(err){
+      diagStatus.textContent = 'нет файла (нужен http/https)';
       diagStatus.style.color = 'var(--danger)';
-      console.error('camera-error:', e.detail);
     });
+  }
+  checkPattern('assets/hiro.patt', 'hiro.patt');
 
-    // AR.js appends a debug canvas to body (no stable id). Tag it and force
-    // on-screen placement so our fullscreen video/canvas layers don't hide it.
-    function refreshDebugCanvases(){
-      var show = document.body.classList.contains('show-debug-ui');
-      var list = document.querySelectorAll('canvas');
-      for(var i = 0; i < list.length; i++){
-        var c = list[i];
-        if(c.classList.contains('a-canvas')) continue;
-        if(c.closest && c.closest('a-scene')) continue;
-        c.classList.add('arjs-debug-ui');
-        c.style.setProperty('position', 'fixed', 'important');
-        c.style.setProperty('top', '10px', 'important');
-        c.style.setProperty('left', '10px', 'important');
-        c.style.setProperty('width', '220px', 'important');
-        c.style.setProperty('z-index', '85', 'important');
-        c.style.setProperty('display', show ? 'block' : 'none', 'important');
-        c.style.setProperty('opacity', show ? '1' : '0', 'important');
-        c.style.setProperty('visibility', show ? 'visible' : 'hidden', 'important');
+  scene.addEventListener('camera-error', function(e){
+    diagStatus.textContent = 'камера: нет доступа';
+    diagStatus.style.color = 'var(--danger)';
+    console.error('camera-error', e.detail);
+  });
+
+  /* —— debug frames —— */
+  function setDebugUi(on){
+    document.body.classList.toggle('show-arjs-debug', !!on);
+    debugToggle.checked = !!on;
+    debugChip.classList.toggle('on', !!on);
+    markerFrame.classList.toggle('on', !!on);
+    pinArjsDebugCanvas();
+  }
+  function pinArjsDebugCanvas(){
+    var show = document.body.classList.contains('show-arjs-debug');
+    var list = document.querySelectorAll('canvas');
+    var found = 0;
+    for(var i = 0; i < list.length; i++){
+      var c = list[i];
+      if(c.classList.contains('a-canvas')) continue;
+      if(c.parentElement && c.parentElement.closest && c.parentElement.closest('a-scene')) continue;
+      // skip if it's the WebGL canvas (has webgl context)
+      try{
+        if(c.getContext && (c.getContext('webgl') || c.getContext('webgl2'))) continue;
+      }catch(e){}
+      c.classList.add('arjs-debug-ui');
+      c.style.cssText = [
+        'position:fixed','top:8px','left:8px','width:160px','height:120px',
+        'z-index:80','border:1px solid #2f7a58','border-radius:6px',
+        'background:#000','display:'+(show?'block':'none'),
+        'object-fit:contain','pointer-events:none'
+      ].join(' !important;') + ' !important;';
+      found++;
+    }
+    if(found && !pinArjsDebugCanvas._logged){
+      pinArjsDebugCanvas._logged = true;
+      console.log('AR.js debug canvas: ' + found);
+    }
+  }
+  debugToggle.addEventListener('change', function(){ setDebugUi(debugToggle.checked); });
+  setDebugUi(true);
+  [400, 1000, 2000, 4000, 8000].forEach(function(ms){ setTimeout(pinArjsDebugCanvas, ms); });
+  if(window.MutationObserver){
+    new MutationObserver(function(muts){
+      for(var i=0;i<muts.length;i++){
+        var nodes = muts[i].addedNodes;
+        for(var j=0;j<nodes.length;j++){
+          if(nodes[j] && nodes[j].nodeName === 'CANVAS'){ pinArjsDebugCanvas(); return; }
+        }
       }
+    }).observe(document.body, {childList:true, subtree:true});
+  }
+
+  uiToggle.addEventListener('click', function(){
+    var hidden = document.body.classList.toggle('ui-hidden');
+    uiToggle.textContent = hidden ? 'UI+' : 'UI';
+  });
+
+  scene.addEventListener('loaded', function(){ loader.style.display = 'none'; });
+  setTimeout(function(){ loader.style.display = 'none'; }, 4000);
+
+  setTimeout(function(){
+    var video = document.querySelector('video');
+    if(video) console.log('video ' + video.videoWidth + 'x' + video.videoHeight);
+    else console.warn('no video');
+  }, 2000);
+
+  /* CSS size only — do not touch AR camera projection */
+  var lastFs = '';
+  function forceCssSize(){
+    var w = window.innerWidth, h = window.innerHeight;
+    var video = document.querySelector('video');
+    var canvas = document.querySelector('canvas.a-canvas');
+    if(video){
+      video.style.setProperty('width', w+'px', 'important');
+      video.style.setProperty('height', h+'px', 'important');
     }
-    function setDebugUi(on){
-      document.body.classList.toggle('show-debug-ui', !!on);
-      debugToggle.checked = !!on;
-      refreshDebugCanvases();
+    if(canvas){
+      canvas.style.setProperty('width', w+'px', 'important');
+      canvas.style.setProperty('height', h+'px', 'important');
     }
-    debugToggle.addEventListener('change', function(){
-      setDebugUi(debugToggle.checked);
+    var key = w+'x'+h;
+    if(key !== lastFs){ lastFs = key; console.log('viewport '+key); }
+  }
+  [300,1000,2500].forEach(function(ms){ setTimeout(forceCssSize, ms); });
+  window.addEventListener('resize', function(){ setTimeout(forceCssSize, 50); });
+  window.addEventListener('orientationchange', function(){ setTimeout(forceCssSize, 300); });
+
+  function setStatus(found){
+    if(found){
+      statusPill.classList.add('found');
+      statusText.textContent = 'найден';
+      markerFrame.classList.add('found');
+    } else {
+      statusPill.classList.remove('found');
+      statusText.textContent = 'поиск…';
+      markerFrame.classList.remove('found');
+    }
+  }
+
+  if(markerHiro){
+    markerHiro.addEventListener('markerFound', function(){
+      setStatus(true);
+      console.log('[AR] markerFound');
+      if(markerHiro.object3D){
+        markerHiro.object3D.visible = true;
+        markerHiro.object3D.traverse(function(o){ o.visible = true; });
+      }
     });
-    // Pick up the canvas once AR.js creates it (often ~0.5–2s after start)
-    [500, 1200, 2500, 5000].forEach(function(ms){ setTimeout(refreshDebugCanvases, ms); });
-    scene.addEventListener('loaded', function(){ setTimeout(refreshDebugCanvases, 200); });
-    scene.addEventListener('arjs-video-loaded', function(){ setTimeout(refreshDebugCanvases, 200); });
-    if(window.MutationObserver){
-      new MutationObserver(function(mutations){
-        for(var i = 0; i < mutations.length; i++){
-          var nodes = mutations[i].addedNodes;
-          for(var j = 0; j < nodes.length; j++){
-            var n = nodes[j];
-            if(n && n.nodeName === 'CANVAS'){ refreshDebugCanvases(); return; }
-            if(n && n.querySelector && n.querySelector('canvas')){ refreshDebugCanvases(); return; }
-          }
-        }
-      }).observe(document.body, {childList:true, subtree:true});
-    }
-    // Default: on
-    setDebugUi(true);
-
-    var uiToggle = document.getElementById('uiToggle');
-    uiToggle.addEventListener('click', function(){
-      var hidden = document.body.classList.toggle('ui-hidden');
-      uiToggle.textContent = hidden ? 'UI показать' : 'UI скрыть';
-    });
-
-    scene.addEventListener('loaded', function(){
-      loader.style.display = 'none';
-    });
-    // fallback in case 'loaded' fires before listener attaches / or never fires quickly
-    setTimeout(function(){ loader.style.display = 'none'; }, 4000);
-
-    setTimeout(function(){
-      var video = document.querySelector('video');
-      if(video){
-        console.log('video readyState=' + video.readyState + ' ' + video.videoWidth + 'x' + video.videoHeight);
-      } else {
-        console.warn('no <video> after 2s — camera likely not initialised');
-      }
-    }, 2000);
-
-    // Only pin CSS size of video/canvas. Do NOT touch camera.projectionMatrix
-    // or renderer.setSize — AR.js owns those so the 3D content lines up with
-    // the tracked marker. Overwriting the projection is why markerFound can
-    // fire while the cube stays invisible / off-screen.
-    var lastFsKey = '';
-    function forceFullscreen(){
-      var w = window.innerWidth;
-      var h = window.innerHeight;
-      var video = document.querySelector('video');
-      var canvas = document.querySelector('canvas.a-canvas') || document.querySelector('a-scene canvas');
-      var sceneEl = document.getElementById('scene');
-
-      if(video){
-        video.style.setProperty('position', 'fixed', 'important');
-        video.style.setProperty('top', '0', 'important');
-        video.style.setProperty('left', '0', 'important');
-        video.style.setProperty('width', w + 'px', 'important');
-        video.style.setProperty('height', h + 'px', 'important');
-        video.style.setProperty('object-fit', 'cover', 'important');
-        video.style.setProperty('z-index', '0', 'important');
-      }
-      if(canvas){
-        canvas.style.setProperty('position', 'fixed', 'important');
-        canvas.style.setProperty('top', '0', 'important');
-        canvas.style.setProperty('left', '0', 'important');
-        canvas.style.setProperty('width', w + 'px', 'important');
-        canvas.style.setProperty('height', h + 'px', 'important');
-        canvas.style.setProperty('z-index', '1', 'important');
-        canvas.style.setProperty('display', 'block', 'important');
-      }
-      if(sceneEl){
-        sceneEl.style.setProperty('width', w + 'px', 'important');
-        sceneEl.style.setProperty('height', h + 'px', 'important');
-      }
-      window.dispatchEvent(new Event('resize'));
-      var key = w + 'x' + h;
-      if(key !== lastFsKey){
-        lastFsKey = key;
-        console.log('viewport ' + key);
-      }
-    }
-    [300, 800, 1500, 3000].forEach(function(ms){ setTimeout(forceFullscreen, ms); });
-    window.addEventListener('resize', function(){ setTimeout(forceFullscreen, 50); });
-    window.addEventListener('orientationchange', function(){
-      setTimeout(forceFullscreen, 300);
-      setTimeout(forceFullscreen, 800);
-    });
-    scene.addEventListener('loaded', function(){ setTimeout(forceFullscreen, 100); });
-    scene.addEventListener('arjs-video-loaded', function(){ setTimeout(forceFullscreen, 100); });
-
-    function setStatus(found){
-      if(found){
-        statusPill.classList.add('found');
-        statusText.textContent = 'маркер найден';
-      } else {
-        statusPill.classList.remove('found');
-        statusText.textContent = 'поиск маркера…';
-      }
-    }
-
-    function bindMarkerEvents(markerEl, label){
-      if(!markerEl) return;
-      markerEl.addEventListener('markerFound', function(){
-        setStatus(true);
-        console.log('[AR] markerFound:', label);
-        // Ensure child content is visible in three.js when tracking starts
-        if(markerEl.object3D){
-          markerEl.object3D.visible = true;
-          markerEl.object3D.traverse(function(obj){ obj.visible = true; });
-        }
-      });
-      markerEl.addEventListener('markerLost', function(){
-        setStatus(false);
-        console.log('[AR] markerLost:', label);
-      });
-    }
-    bindMarkerEvents(markerHiro, 'hiro');
-    bindMarkerEvents(markerCustom, 'custom');
-
-    function activate(mode){
-      if(mode === 'hiro'){
-        if(markerHiro){
-          markerHiro.setAttribute('visible', 'true');
-          if(markerHiro.object3D) markerHiro.object3D.visible = true;
-        }
-        if(markerCustom){
-          markerCustom.setAttribute('visible', 'false');
-          if(markerCustom.object3D) markerCustom.object3D.visible = false;
-        }
-        btnHiro.classList.add('active');
-        btnCustom.classList.remove('active');
-        customFileWrap.style.display = 'none';
-        activeMarker = markerHiro;
-        checkPattern('assets/hiro.patt', 'assets/hiro.patt');
-      } else {
-        if(!markerCustom){
-          console.warn('Кастомный маркер отключён в HTML');
-          return;
-        }
-        // Only enable custom marker after a .patt has been chosen
-        if(!customObjectUrl){
-          console.warn('Сначала выберите .patt файл');
-          customFileWrap.style.display = 'block';
-          btnCustom.classList.add('active');
-          btnHiro.classList.remove('active');
-          return;
-        }
-        markerCustom.setAttribute('visible', 'true');
-        if(markerCustom.object3D) markerCustom.object3D.visible = true;
-        if(markerHiro){
-          markerHiro.setAttribute('visible', 'false');
-          if(markerHiro.object3D) markerHiro.object3D.visible = false;
-        }
-        btnCustom.classList.add('active');
-        btnHiro.classList.remove('active');
-        customFileWrap.style.display = 'block';
-        activeMarker = markerCustom;
-        checkPattern(customObjectUrl, 'выбранный .patt');
-      }
+    markerHiro.addEventListener('markerLost', function(){
       setStatus(false);
-    }
-
-    btnHiro.addEventListener('click', function(){ activate('hiro'); });
-    btnCustom.addEventListener('click', function(){ activate('custom'); });
-
-    fileInput.addEventListener('change', function(e){
-      var file = e.target.files && e.target.files[0];
-      if(!file) return;
-      if(!markerCustom){
-        console.warn('Кастомный маркер отключён в HTML');
-        return;
-      }
-      if(customObjectUrl) URL.revokeObjectURL(customObjectUrl);
-      customObjectUrl = URL.createObjectURL(file);
-      // Must set url BEFORE making the marker visible, otherwise AR.js
-      // tries to load an empty pattern and throws "Pattern Data read error".
-      markerCustom.setAttribute('url', customObjectUrl);
-      fileBtnLabel.textContent = file.name;
-      fileBtn.classList.add('has-file');
-      activate('custom');
+      console.log('[AR] markerLost');
     });
-  })();
-</script>
+  }
 
+  btnHiro.addEventListener('click', function(){
+    btnHiro.classList.add('active');
+    btnCustom.classList.remove('active');
+    customFileWrap.style.display = 'none';
+    if(markerHiro){
+      markerHiro.setAttribute('visible', 'true');
+      if(markerHiro.object3D) markerHiro.object3D.visible = true;
+    }
+    checkPattern('assets/hiro.patt', 'hiro.patt');
+    setStatus(false);
+  });
+  btnCustom.addEventListener('click', function(){
+    btnCustom.classList.add('active');
+    btnHiro.classList.remove('active');
+    customFileWrap.style.display = 'block';
+    console.warn('Кастомный .patt: маркер в HTML отключён');
+  });
+  fileInput.addEventListener('change', function(e){
+    var file = e.target.files && e.target.files[0];
+    if(!file) return;
+    fileBtnLabel.textContent = file.name;
+    fileBtn.classList.add('has-file');
+    console.warn('Нужен раскомментированный a-marker custom в HTML');
+  });
+})();
+</script>
 </body>
 </html>
