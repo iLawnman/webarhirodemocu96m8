@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>3 Anchor AR Marker Viewer</title>
+  <title>4 Anchor AR Marker Viewer</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -402,28 +402,43 @@
       }
     }
 
-    /* Якорь: пока маркер виден — ребёнок маркера (точно следует).
-       При markerLost — отцепляем в сцену и замораживаем world-позу.
-       (В чистом marker-based AR.js настоящей world-tracking нет.) */
+    /* Якорь:
+       - при первом markerFound создаётся как ребёнок маркера
+       - при markerLost отцепляется в сцену и замораживает позу
+       - больше не удаляется и не прячется
+       - при повторных found просто остаётся (уже frozen) */
     var hiroAnchor = null;
     var hiroAnchorFrozen = false;
 
+    function forceVisible(el){
+      if(!el) return;
+      el.setAttribute('visible', true);
+      if(el.object3D){
+        el.object3D.visible = true;
+        el.object3D.traverse(function(o){ o.visible = true; });
+      }
+    }
+
     function createAnchorOnMarker(markerEl, label){
-      if(hiroAnchor) return;
+      // Уже есть (даже если frozen) — не трогаем
+      if(hiroAnchor){
+        forceVisible(hiroAnchor);
+        return;
+      }
 
       var anchor = document.createElement('a-entity');
       anchor.setAttribute('id', 'world-anchor-' + label);
+      anchor.setAttribute('visible', true);
 
-      // Жёлтый пин
       var pin = document.createElement('a-box');
       pin.setAttribute('width', '0.25');
       pin.setAttribute('height', '0.25');
       pin.setAttribute('depth', '0.25');
       pin.setAttribute('position', '0 0.15 0');
       pin.setAttribute('material', 'color:#ffcc00; emissive:#aa8800; emissiveIntensity:0.6');
+      pin.setAttribute('visible', true);
       anchor.appendChild(pin);
 
-      // Текст
       var text = document.createElement('a-text');
       text.setAttribute('value', label);
       text.setAttribute('position', '0 0.7 0');
@@ -434,32 +449,37 @@
       text.setAttribute('width', '6');
       text.setAttribute('scale', '2 2 2');
       text.setAttribute('side', 'double');
+      text.setAttribute('visible', true);
       anchor.appendChild(text);
 
-      // Сначала — ребёнок маркера, чтобы точно стоял на нём
       markerEl.appendChild(anchor);
       hiroAnchor = anchor;
+      forceVisible(anchor);
       console.log('[AR] anchor created on marker:', label);
     }
 
     function freezeAnchorToWorld(){
       if(!hiroAnchor || hiroAnchorFrozen) return;
       var THREE = window.THREE || (window.AFRAME && window.AFRAME.THREE);
-      if(!THREE || !hiroAnchor.object3D) return;
+      if(!THREE || !hiroAnchor.object3D){
+        console.warn('[AR] freeze failed: no object3D');
+        return;
+      }
 
-      // Запоминаем текущую world-позу
       var worldPos = new THREE.Vector3();
       var worldQuat = new THREE.Quaternion();
-      var worldScale = new THREE.Vector3();
+      var worldScale = new THREE.Vector3(1, 1, 1);
       hiroAnchor.object3D.updateMatrixWorld(true);
       hiroAnchor.object3D.getWorldPosition(worldPos);
       hiroAnchor.object3D.getWorldQuaternion(worldQuat);
       hiroAnchor.object3D.getWorldScale(worldScale);
 
-      // Отцепляем от маркера → в корень сцены
+      // Отцепляем в корень сцены ДО того, как AR.js спрячет маркер
+      if(hiroAnchor.parentElement){
+        hiroAnchor.parentElement.removeChild(hiroAnchor);
+      }
       scene.appendChild(hiroAnchor);
 
-      // Восстанавливаем ту же world-позу
       hiroAnchor.object3D.position.copy(worldPos);
       hiroAnchor.object3D.quaternion.copy(worldQuat);
       hiroAnchor.object3D.scale.copy(worldScale);
@@ -469,8 +489,9 @@
         x: worldPos.x, y: worldPos.y, z: worldPos.z
       });
 
+      forceVisible(hiroAnchor);
       hiroAnchorFrozen = true;
-      console.log('[AR] anchor frozen to world:', worldPos.toArray());
+      console.log('[AR] anchor frozen to world:', worldPos.x.toFixed(3), worldPos.y.toFixed(3), worldPos.z.toFixed(3));
     }
 
     if(markerHiro){
@@ -481,14 +502,17 @@
           markerHiro.object3D.visible = true;
           markerHiro.object3D.traverse(function(o){ o.visible = true; });
         }
-        // Создаём якорь на маркере (если ещё нет)
         createAnchorOnMarker(markerHiro, 'Hiro');
+        // если уже frozen — просто убеждаемся что виден
+        if(hiroAnchorFrozen) forceVisible(hiroAnchor);
       });
       markerHiro.addEventListener('markerLost', function(){
         setStatus(false);
         console.log('[AR] markerLost');
-        // Отцепляем и замораживаем в мире
         freezeAnchorToWorld();
+        // на всякий случай ещё раз показать после freeze
+        setTimeout(function(){ forceVisible(hiroAnchor); }, 0);
+        setTimeout(function(){ forceVisible(hiroAnchor); }, 100);
       });
     }
 
