@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>1 Anchor AR Marker Viewer</title>
+  <title>2 Anchor AR Marker Viewer</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -217,7 +217,7 @@
   <a-assets></a-assets>
 
   <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
-    <a-box position="0 0 1" depth="1" height="1" width="1"
+    <a-box position="0 0 0" depth="1" height="1" width="1"
            material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
     ></a-box>
   </a-marker>
@@ -421,34 +421,59 @@
       markerEl.object3D.getWorldPosition(worldPos);
       markerEl.object3D.getWorldQuaternion(worldQuat);
 
-      // Принудительно z = 10 (чтобы было видно)
-      // worldPos.z = 10;
+      console.log('[AR] marker world pos:', worldPos.x.toFixed(3), worldPos.y.toFixed(3), worldPos.z.toFixed(3));
 
       // Отдельный якорь (не ребёнок маркера)
       var anchor = document.createElement('a-entity');
       anchor.setAttribute('id', 'world-anchor-' + label);
-      anchor.setAttribute('position', worldPos.x + ' ' + worldPos.y + ' ' + worldPos.z);
 
-      // Текст, привязанный к якорю
+      // Видимый маркер якоря (маленький куб), чтобы точно было что видеть
+      var pin = document.createElement('a-box');
+      pin.setAttribute('width', '0.25');
+      pin.setAttribute('height', '0.25');
+      pin.setAttribute('depth', '0.25');
+      pin.setAttribute('position', '0 0.15 0');
+      pin.setAttribute('material', 'color:#ffcc00; emissive:#aa8800; emissiveIntensity:0.6');
+      anchor.appendChild(pin);
+
+      // Текст с именем
       var text = document.createElement('a-text');
       text.setAttribute('value', label);
-      text.setAttribute('position', '1 0 0');
+      text.setAttribute('position', '0 0.7 0');
       text.setAttribute('align', 'center');
-      text.setAttribute('color', '#e7ecef');
-      text.setAttribute('width', '3.5');
-      text.setAttribute('scale', '1.2 1.2 1.2');
-      text.setAttribute('material', 'shader: flat; transparent: true');
+      text.setAttribute('anchor', 'center');
+      text.setAttribute('baseline', 'center');
+      text.setAttribute('color', '#ffffff');
+      text.setAttribute('width', '6');
+      text.setAttribute('scale', '2 2 2');
+      text.setAttribute('side', 'double');
       anchor.appendChild(text);
 
       scene.appendChild(anchor);
 
-      // После добавления в сцену — ориентация
-      if (anchor.object3D) {
-          anchor.object3D.position.copy(worldPos);   // позиция из маркера (с z = 10)
-          anchor.object3D.quaternion.copy(worldQuat);
-    }
+      // Надёжная установка transform после появления object3D
+      function applyTransform(){
+        if(!anchor.object3D) return;
+        anchor.object3D.position.copy(worldPos);
+        anchor.object3D.quaternion.copy(worldQuat);
+        anchor.object3D.updateMatrixWorld(true);
+        // Дублируем через setAttribute, чтобы A-Frame не сбросил
+        anchor.setAttribute('position', {
+          x: worldPos.x,
+          y: worldPos.y,
+          z: worldPos.z
+        });
+        console.log('[AR] world anchor applied:', label, anchor.object3D.position.toArray());
+      }
 
-      console.log('[AR] world anchor placed:', label, worldPos.toArray());
+      if(anchor.object3D){
+        applyTransform();
+      } else {
+        anchor.addEventListener('loaded', applyTransform);
+        // запасной таймер на случай, если loaded уже прошёл
+        setTimeout(applyTransform, 50);
+        setTimeout(applyTransform, 200);
+      }
     }
 
     if(markerHiro){
