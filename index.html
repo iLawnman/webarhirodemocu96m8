@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>AnchorTXT AR Marker Viewer</title>
+  <title>Anchor AR Marker Viewer</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -58,17 +58,6 @@
     .status-pill.found{border-color:var(--accent-dim);color:var(--accent);}
     .status-pill.found .led{background:var(--accent);box-shadow:0 0 6px var(--accent);}
 
-    .seg{
-      display:flex;background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden;
-    }
-    .seg button{
-      border:0;background:transparent;color:var(--text-dim);
-      padding:7px 10px;font-size:12px;cursor:pointer;
-      border-right:1px solid var(--line);
-    }
-    .seg button:last-child{border-right:0;}
-    .seg button.active{background:var(--accent);color:#06120c;font-weight:600;}
-
     .chip{
       font-family:var(--mono);font-size:11px;color:var(--text-dim);
       background:var(--panel);border:1px solid var(--line);border-radius:8px;
@@ -77,16 +66,6 @@
     }
     .chip input{margin:0;}
     .chip.on{border-color:var(--accent-dim);color:var(--accent);}
-
-    .file-btn{
-      position:relative;overflow:hidden;
-      font-size:12px;color:var(--text);
-      background:var(--panel);border:1px solid var(--line);border-radius:8px;
-      padding:7px 10px;cursor:pointer;white-space:nowrap;
-    }
-    .file-btn input{position:absolute;inset:0;opacity:0;cursor:pointer;}
-    .file-btn.has-file{border-color:var(--accent-dim);color:var(--accent);}
-    #customFileWrap{display:none;}
 
     #diagStatus{font-family:var(--mono);font-size:10px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
@@ -199,16 +178,6 @@
 <div class="chrome" id="chrome">
   <div class="chrome-row">
     <div id="statusPill" class="status-pill"><span class="led"></span><span id="statusText">поиск…</span></div>
-    <div class="seg">
-      <button id="btnHiro" class="active" type="button">Hiro</button>
-      <button id="btnCustom" type="button">Свой</button>
-    </div>
-    <div id="customFileWrap">
-      <label class="file-btn" id="fileBtn">
-        <span id="fileBtnLabel">.patt…</span>
-        <input type="file" id="pattFile" accept=".patt">
-      </label>
-    </div>
     <label class="chip on" id="debugChip">
       <input type="checkbox" id="debugToggle" checked> рамки
     </label>
@@ -248,7 +217,7 @@
   <a-assets></a-assets>
 
   <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
-    <a-box position="0 0 0" depth="1" height="1" width="1"
+    <a-box position="0 2 0" depth="1" height="1" width="1"
            material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
     ></a-box>
   </a-marker>
@@ -309,18 +278,11 @@
     var statusPill = document.getElementById('statusPill');
     var statusText = document.getElementById('statusText');
     var markerHiro = document.getElementById('markerHiro');
-    var btnHiro = document.getElementById('btnHiro');
-    var btnCustom = document.getElementById('btnCustom');
-    var customFileWrap = document.getElementById('customFileWrap');
-    var fileInput = document.getElementById('pattFile');
-    var fileBtn = document.getElementById('fileBtn');
-    var fileBtnLabel = document.getElementById('fileBtnLabel');
     var diagStatus = document.getElementById('diagStatus');
     var debugToggle = document.getElementById('debugToggle');
     var debugChip = document.getElementById('debugChip');
     var markerFrame = document.getElementById('markerFrame');
     var uiToggle = document.getElementById('uiToggle');
-    var customObjectUrl = null;
 
     function checkPattern(url, label){
       if(!url){ diagStatus.textContent = ''; return; }
@@ -460,7 +422,7 @@
       markerEl.object3D.getWorldQuaternion(worldQuat);
 
       // Принудительно z = 10 (чтобы было видно)
-      worldPos.z = 10;
+      // worldPos.z = 10;
 
       // Отдельный якорь (не ребёнок маркера)
       var anchor = document.createElement('a-entity');
@@ -482,8 +444,9 @@
 
       // После добавления в сцену — ориентация
       if (anchor.object3D) {
-        anchor.object3D.quaternion.copy(worldQuat);
-      }
+          anchor.object3D.position.copy(worldPos);   // позиция из маркера (с z = 10)
+          anchor.object3D.quaternion.copy(worldQuat);
+    }
 
       console.log('[AR] world anchor placed:', label, worldPos.toArray());
     }
@@ -509,30 +472,6 @@
       });
     }
 
-    btnHiro.addEventListener('click', function(){
-      btnHiro.classList.add('active');
-      btnCustom.classList.remove('active');
-      customFileWrap.style.display = 'none';
-      if(markerHiro){
-        markerHiro.setAttribute('visible', 'true');
-        if(markerHiro.object3D) markerHiro.object3D.visible = true;
-      }
-      checkPattern('assets/hiro.patt', 'hiro.patt');
-      setStatus(false);
-    });
-    btnCustom.addEventListener('click', function(){
-      btnCustom.classList.add('active');
-      btnHiro.classList.remove('active');
-      customFileWrap.style.display = 'block';
-      console.warn('Кастомный .patt: маркер в HTML отключён');
-    });
-    fileInput.addEventListener('change', function(e){
-      var file = e.target.files && e.target.files[0];
-      if(!file) return;
-      fileBtnLabel.textContent = file.name;
-      fileBtn.classList.add('has-file');
-      console.warn('Нужен раскомментированный a-marker custom в HTML');
-    });
   })();
 </script>
 </body>
