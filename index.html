@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>3 hiro AR Marker — распознавание и куб</title>
+  <title>4 hiro AR Marker — распознавание и куб</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -158,25 +158,29 @@
       margin:0 !important; padding:0 !important;
       display:block !important;
     }
-    /* AR.js's own debug overlay (small black&white canvas with corner markers
-     around recognised squares) is created only when debugUIEnabled is set
-     at scene init - toggling it later isn't reliably picked up. We always
-     enable it at init and just show/hide it ourselves via CSS, positioned
-     above our fullscreen video/render canvas so it's actually visible
-     instead of being covered by them. */
+    /* AR.js debug overlay (threshold / corner-marker canvas). Created when
+       debugUIEnabled:true at scene init. AR.js may park it off-screen or under
+       our fullscreen layers — we re-pin it top-left and toggle visibility. */
+    canvas.arjs-debug-ui,
     canvas:not(.a-canvas){
       position:fixed !important;
       top:10px !important; left:10px !important;
-      width:200px !important; height:auto !important;
+      width:220px !important; height:auto !important;
+      max-width:40vw !important;
       z-index:85 !important;
       border:1px solid var(--accent-dim) !important;
       border-radius:8px !important;
-      opacity:0;
-      pointer-events:none;
-      transition:opacity .15s;
+      background:#000 !important;
+      opacity:0 !important;
+      visibility:hidden !important;
+      pointer-events:none !important;
+      transition:opacity .15s, visibility .15s;
     }
+    body.show-debug-ui canvas.arjs-debug-ui,
     body.show-debug-ui canvas:not(.a-canvas){
       opacity:1 !important;
+      visibility:visible !important;
+      display:block !important;
     }
 
     /* On-screen console for devices without devtools access (tablets, phones).
@@ -250,7 +254,7 @@
     #logList .lvl-event{ color:var(--accent); }
   </style>
 </head>
-<body>
+<body class="show-debug-ui">
 
 <div class="topbar">
   <div class="brand"><span class="dot"></span><span>AR&nbsp;MARKER&nbsp;VIEWER</span></div>
@@ -283,7 +287,7 @@
   </p>
   <div class="row" style="justify-content:space-between;">
     <label style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--text-dim);cursor:pointer;">
-      <input type="checkbox" id="debugToggle"> показать рамки распознавания AR.js
+      <input type="checkbox" id="debugToggle" checked> показать рамки распознавания AR.js
     </label>
     <span id="diagStatus" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
   </div>
@@ -450,9 +454,52 @@
       console.error('camera-error:', e.detail);
     });
 
+    // AR.js appends a debug canvas to body (no stable id). Tag it and force
+    // on-screen placement so our fullscreen video/canvas layers don't hide it.
+    function refreshDebugCanvases(){
+      var show = document.body.classList.contains('show-debug-ui');
+      var list = document.querySelectorAll('canvas');
+      for(var i = 0; i < list.length; i++){
+        var c = list[i];
+        if(c.classList.contains('a-canvas')) continue;
+        if(c.closest && c.closest('a-scene')) continue;
+        c.classList.add('arjs-debug-ui');
+        c.style.setProperty('position', 'fixed', 'important');
+        c.style.setProperty('top', '10px', 'important');
+        c.style.setProperty('left', '10px', 'important');
+        c.style.setProperty('width', '220px', 'important');
+        c.style.setProperty('z-index', '85', 'important');
+        c.style.setProperty('display', show ? 'block' : 'none', 'important');
+        c.style.setProperty('opacity', show ? '1' : '0', 'important');
+        c.style.setProperty('visibility', show ? 'visible' : 'hidden', 'important');
+      }
+    }
+    function setDebugUi(on){
+      document.body.classList.toggle('show-debug-ui', !!on);
+      debugToggle.checked = !!on;
+      refreshDebugCanvases();
+    }
     debugToggle.addEventListener('change', function(){
-      document.body.classList.toggle('show-debug-ui', debugToggle.checked);
+      setDebugUi(debugToggle.checked);
     });
+    // Pick up the canvas once AR.js creates it (often ~0.5–2s after start)
+    [500, 1200, 2500, 5000].forEach(function(ms){ setTimeout(refreshDebugCanvases, ms); });
+    scene.addEventListener('loaded', function(){ setTimeout(refreshDebugCanvases, 200); });
+    scene.addEventListener('arjs-video-loaded', function(){ setTimeout(refreshDebugCanvases, 200); });
+    if(window.MutationObserver){
+      new MutationObserver(function(mutations){
+        for(var i = 0; i < mutations.length; i++){
+          var nodes = mutations[i].addedNodes;
+          for(var j = 0; j < nodes.length; j++){
+            var n = nodes[j];
+            if(n && n.nodeName === 'CANVAS'){ refreshDebugCanvases(); return; }
+            if(n && n.querySelector && n.querySelector('canvas')){ refreshDebugCanvases(); return; }
+          }
+        }
+      }).observe(document.body, {childList:true, subtree:true});
+    }
+    // Default: on
+    setDebugUi(true);
 
     var uiToggle = document.getElementById('uiToggle');
     uiToggle.addEventListener('click', function(){
