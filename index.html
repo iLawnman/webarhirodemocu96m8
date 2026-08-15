@@ -1,366 +1,411 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Floor Sphere Anchor AR Marker Viewer</title>
-
-  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-  <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>window AR Debug — T1</title>
   <style>
-    :root{
-      --bg:#0b0d10;--panel:#12161b;--line:#232a31;--accent:#5ee3a5;
-      --accent-dim:#2f7a58;--text:#e7ecef;--text-dim:#8a97a3;--danger:#e35e5e;
-      --mono:"IBM Plex Mono","SFMono-Regular",Consolas,monospace;
-      --sans:"Inter",-apple-system,"Segoe UI",sans-serif;
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #000; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+    canvas { display: block; }
+    #log-panel {
+      position: fixed; top: 10px; right: 10px; width: 320px; max-height: 75vh;
+      background: rgba(0,0,0,0.78); backdrop-filter: blur(8px);
+      border-radius: 12px; border: 1px solid rgba(255,255,255,0.12);
+      color: #0f0; font-family: 'SF Mono', Monaco, monospace; font-size: 11px;
+      line-height: 1.5; overflow-y: auto; z-index: 100;
+      transition: transform .3s ease, opacity .3s ease;
+      padding: 12px; word-break: break-word;
     }
-    *{box-sizing:border-box;}
-    html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow:hidden;}
-
-    .arjs-loader{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;}
-    .arjs-loader .spinner{width:28px;height:28px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--accent);animation:spin .9s linear infinite;}
-    @keyframes spin{to{transform:rotate(360deg);}}
-    .arjs-loader p{font-family:var(--mono);font-size:12px;color:var(--text-dim);}
-
-    .chrome{position:fixed;left:0;right:0;bottom:0;z-index:60;padding:10px 12px calc(10px + env(safe-area-inset-bottom));background:linear-gradient(0deg,rgba(11,13,16,.92),rgba(11,13,16,.55) 75%,transparent);display:flex;flex-direction:column;gap:8px;transition:opacity .2s,transform .2s;}
-    body.ui-hidden .chrome{opacity:0;pointer-events:none;transform:translateY(16px);}
-
-    .chrome-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
-    .status-pill{font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:16px;background:var(--panel);border:1px solid var(--line);color:var(--text-dim);display:flex;align-items:center;gap:6px;white-space:nowrap;}
-    .status-pill .led{width:6px;height:6px;border-radius:50%;background:var(--text-dim);}
-    .status-pill.found{border-color:var(--accent-dim);color:var(--accent);}
-    .status-pill.found .led{background:var(--accent);box-shadow:0 0 6px var(--accent);}
-
-    .chip{font-family:var(--mono);font-size:11px;color:var(--text-dim);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 10px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;-webkit-tap-highlight-color:transparent;}
-    .chip input{margin:0;}
-    .chip.on{border-color:var(--accent-dim);color:var(--accent);}
-
-    #diagStatus{font-family:var(--mono);font-size:10px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-    #uiToggle{position:fixed;top:calc(10px + env(safe-area-inset-bottom));left:12px;z-index:90;font-family:var(--mono);font-size:11px;color:var(--text);background:rgba(18,22,27,.92);border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer;}
-    body.ui-hidden #uiToggle{border-color:var(--accent-dim);color:var(--accent);}
-
-    a-scene{position:fixed !important;inset:0 !important;width:100% !important;height:100% !important;max-width:none !important;max-height:none !important;z-index:10;}
-    video{position:fixed !important;top:0 !important;left:0 !important;width:100vw !important;height:100vh !important;height:100dvh !important;object-fit:cover !important;z-index:0 !important;margin:0 !important;padding:0 !important;}
-    a-scene canvas,canvas.a-canvas{position:fixed !important;top:0 !important;left:0 !important;width:100vw !important;height:100vh !important;height:100dvh !important;z-index:11 !important;background:transparent !important;display:block !important;margin:0 !important;padding:0 !important;}
-
-    #markerFrame{position:fixed;inset:0;z-index:2;pointer-events:none;display:none;}
-    #markerFrame.on{display:block;}
-    #markerFrame .box{position:absolute;left:50%;top:50%;width:min(42vw,180px);height:min(42vw,180px);transform:translate(-50%,-50%);border:2px solid var(--accent);box-shadow:0 0 0 1px rgba(0,0,0,.35), 0 0 18px rgba(94,227,165,.35);border-radius:4px;opacity:.85;}
-    #markerFrame .box::before,#markerFrame .box::after{content:"";position:absolute;width:18px;height:18px;border:3px solid var(--accent);}
-    #markerFrame .box::before{top:-3px;left:-3px;border-right:0;border-bottom:0;}
-    #markerFrame .box::after{bottom:-3px;right:-3px;border-left:0;border-top:0;}
-    #markerFrame.found .box{border-color:#fff;box-shadow:0 0 22px rgba(94,227,165,.7);}
-
-    canvas.arjs-debug-ui{position:fixed !important;top:8px !important;left:8px !important;width:160px !important;height:120px !important;z-index:80 !important;border:1px solid var(--accent-dim) !important;border-radius:6px !important;background:#000 !important;object-fit:contain !important;pointer-events:none !important;}
-    body:not(.show-arjs-debug) canvas.arjs-debug-ui{display:none !important;}
-
-    #logPanel{position:fixed;top:0;right:0;bottom:0;z-index:200;width:min(72vw,300px);background:rgba(10,12,15,.88);border-left:1px solid var(--line);display:flex;flex-direction:column;transform:translateX(0);transition:transform .25s ease;}
-    #logPanel.hidden{transform:translateX(calc(100% - 26px));}
-    #logEar{position:absolute;left:0;top:50%;transform:translate(-100%,-50%);width:26px;min-height:72px;padding:10px 0;display:flex;align-items:center;justify-content:center;background:rgba(10,12,15,.92);border:1px solid var(--line);border-right:0;border-radius:8px 0 0 8px;cursor:pointer;}
-    #logEar span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:10px;letter-spacing:.1em;color:var(--text-dim);}
-    #logPanel:not(.hidden) #logEar span{color:var(--accent);}
-    #logPanelHead{flex:none;display:flex;align-items:center;justify-content:space-between;padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--text-dim);}
-    #logPanelHead button{font-family:var(--mono);font-size:11px;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:3px 8px;cursor:pointer;}
-    #logList{flex:1;overflow-y:auto;padding:8px 10px;font-family:var(--mono);font-size:10px;line-height:1.4;}
-    #logList .entry{margin-bottom:5px;white-space:pre-wrap;word-break:break-word;}
-    #logList .t{color:var(--text-dim);}
-    #logList .lvl-info{color:var(--text);}
-    #logList .lvl-warn{color:#e3c15e;}
-    #logList .lvl-error{color:var(--danger);}
+    #log-panel.collapsed { transform: translateX(calc(100% + 30px)); opacity: 0; pointer-events: none; }
+    #log-panel .entry { margin-bottom: 4px; }
+    #log-panel .entry.err { color: #ff4444; }
+    #log-panel .entry.warn { color: #ffaa00; }
+    #log-panel .entry.info { color: #44aaff; }
+    #log-panel .entry.ok { color: #44ff44; }
+    #log-toggle {
+      position: fixed; top: 10px; right: 10px; z-index: 101;
+      background: rgba(0,0,0,0.6); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 8px; padding: 6px 14px; font-size: 12px; cursor: pointer;
+      backdrop-filter: blur(4px);
+    }
+    #ctrl {
+      position: fixed; bottom: 24px; left: 0; width: 100%;
+      display: flex; justify-content: center; gap: 12px; z-index: 50;
+      pointer-events: none;
+    }
+    #ctrl button {
+      pointer-events: auto; padding: 12px 24px; font-size: 15px;
+      border: none; border-radius: 10px; font-weight: 600; cursor: pointer;
+      background: #fff; color: #000; box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+    }
+    #ctrl button:disabled { opacity: .45; cursor: not-allowed; }
+    #ctrl button.secondary { background: rgba(255,255,255,0.15); color: #fff; }
+    #hint {
+      position: fixed; top: 50px; left: 0; width: 100%; text-align: center;
+      color: #fff; font-size: 13px; pointer-events: none; z-index: 40;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.9); padding: 0 20px;
+    }
+    #target-preview {
+      position: fixed; bottom: 90px; left: 12px; width: 80px; height: 80px;
+      border-radius: 8px; border: 2px solid rgba(255,255,255,0.3);
+      background: rgba(0,0,0,0.5); object-fit: cover; z-index: 60;
+      display: none;
+    }
   </style>
 </head>
-<body class="show-arjs-debug">
-
-<div class="chrome" id="chrome">
-  <div class="chrome-row">
-    <div id="statusPill" class="status-pill"><span class="led"></span><span id="statusText">поиск…</span></div>
-    <label class="chip on" id="debugChip"><input type="checkbox" id="debugToggle" checked> рамки</label>
-    <span id="diagStatus"></span>
+<body>
+  <button id="log-toggle">LOG</button>
+  <div id="log-panel"></div>
+  <img id="target-preview" alt="target">
+  <div id="hint">Инициализация…</div>
+  <div id="ctrl">
+    <button id="btn-ar" disabled>Start AR</button>
+    <button id="btn-test" class="secondary" disabled>Test Anchor</button>
   </div>
-</div>
 
-<button id="uiToggle" type="button">UI</button>
-
-<div class="arjs-loader" id="loader">
-  <div class="spinner"></div>
-  <p>Камера…</p>
-</div>
-
-<div id="markerFrame"><div class="box"></div></div>
-
-<div id="logPanel" class="hidden">
-  <button id="logEar" type="button" title="Лог"><span>ЛОГ</span></button>
-  <div id="logPanelHead">
-    <span>ЛОГ</span>
-    <div style="display:flex;gap:6px;">
-      <button id="logClearBtn" type="button">очистить</button>
-      <button id="logHideBtn" type="button">✕</button>
-    </div>
-  </div>
-  <div id="logList"></div>
-</div>
-
-<a-scene
-  id="scene"
-  vr-mode-ui="enabled: false"
-  renderer="logarithmicDepthBuffer: true; precision: mediump; antialias: true; alpha: true"
-  embedded
-  arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono_and_matrix; matrixCodeType: 3x3; markersAreaEnabled: true;"
-  loading-screen="enabled: false"
->
-  <a-assets></a-assets>
-<!-- Пол -->
-<a-plane id="groundPlane" position="0 -0.5 -2" rotation="-90 0 0" width="6" height="6"
-         material="color:#1a2630; opacity:0.85; transparent: true; side: double">
-</a-plane>
-  
-  <!-- Статичная сфера в центре мира -->
-  <a-sphere id="worldSphere" position="0 0 0" radius="2"
-            material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.35; metalness:0.2; roughness:0.3">
-
-  <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
-    <a-box position="0 0 1" depth="1" height="1" width="1"
-           material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
-    ></a-box>
-  </a-marker>
-
-  <a-entity camera></a-entity>
-</a-scene>
-
-<script>
-(function(){
-  var logList = document.getElementById('logList');
-  var logPanel = document.getElementById('logPanel');
-  var logHideBtn = document.getElementById('logHideBtn');
-  var logEar = document.getElementById('logEar');
-  var logClearBtn = document.getElementById('logClearBtn');
-  var logCount = 0;
-
-  function pad(n){ return n < 10 ? '0'+n : ''+n; }
-  function timeStr(){
-    var d = new Date();
-    return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
-  }
-  function stringifyArg(a){
-    if(a instanceof Error) return a.message;
-    if(typeof a === 'object'){
-      try { return JSON.stringify(a); } catch(e){ return String(a); }
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
     }
-    return String(a);
   }
-  function logToPanel(level, args){
-    logCount++;
-    var line = document.createElement('div');
-    line.className = 'entry';
-    var msg = Array.prototype.map.call(args, stringifyArg).join(' ');
-    line.innerHTML = '<span class="t">['+timeStr()+']</span> <span class="lvl-'+level+'">'+
-            msg.replace(/</g,'&lt;') + '</span>';
-    logList.appendChild(line);
-    logList.scrollTop = logList.scrollHeight;
-    if(logCount > 200){ logList.removeChild(logList.firstChild); }
-  }
-  ['log','warn','error'].forEach(function(level){
-    var original = console[level];
-    console[level] = function(){
-      logToPanel(level === 'log' ? 'info' : level, arguments);
-      original.apply(console, arguments);
-    };
-  });
-  window.addEventListener('error', function(e){
-    logToPanel('error', ['JS: ' + e.message]);
-  });
-  logHideBtn.addEventListener('click', function(){ logPanel.classList.add('hidden'); });
-  logEar.addEventListener('click', function(){ logPanel.classList.toggle('hidden'); });
-  logClearBtn.addEventListener('click', function(){ logList.innerHTML = ''; logCount = 0; });
+  </script>
 
-  console.log('AR v7 start');
+  <script type="module">
+    import * as THREE from 'three';
 
-  var scene = document.getElementById('scene');
-  var loader = document.getElementById('loader');
-  var statusPill = document.getElementById('statusPill');
-  var statusText = document.getElementById('statusText');
-  var markerHiro = document.getElementById('markerHiro');
-  var diagStatus = document.getElementById('diagStatus');
-  var debugToggle = document.getElementById('debugToggle');
-  var debugChip = document.getElementById('debugChip');
-  var markerFrame = document.getElementById('markerFrame');
-  var uiToggle = document.getElementById('uiToggle');
-
-  function checkPattern(url, label){
-    if(!url){ diagStatus.textContent = ''; return; }
-    fetch(url, {cache:'no-store'}).then(function(res){
-      if(res.ok){
-        diagStatus.textContent = label + ' ✓';
-        diagStatus.style.color = 'var(--accent)';
-      } else {
-        diagStatus.textContent = label + ' HTTP ' + res.status;
-        diagStatus.style.color = 'var(--danger)';
-      }
-    }).catch(function(err){
-      diagStatus.textContent = 'нет файла (нужен http/https)';
-      diagStatus.style.color = 'var(--danger)';
+    /* ---------- logger ---------- */
+    const logPanel = document.getElementById('log-panel');
+    const logToggle = document.getElementById('log-toggle');
+    let logVisible = true;
+    logToggle.addEventListener('click', () => {
+      logVisible = !logVisible;
+      logPanel.classList.toggle('collapsed', !logVisible);
     });
-  }
-  checkPattern('assets/hiro.patt', 'hiro.patt');
-
-  scene.addEventListener('camera-error', function(e){
-    diagStatus.textContent = 'камера: нет доступа';
-    diagStatus.style.color = 'var(--danger)';
-    console.error('camera-error', e.detail);
-  });
-
-  function setDebugUi(on){
-    document.body.classList.toggle('show-arjs-debug', !!on);
-    debugToggle.checked = !!on;
-    debugChip.classList.toggle('on', !!on);
-    markerFrame.classList.toggle('on', !!on);
-    pinArjsDebugCanvas();
-  }
-  function pinArjsDebugCanvas(){
-    var show = document.body.classList.contains('show-arjs-debug');
-    var list = document.querySelectorAll('canvas');
-    var found = 0;
-    for(var i = 0; i < list.length; i++){
-      var c = list[i];
-      if(c.classList.contains('a-canvas')) continue;
-      if(c.parentElement && c.parentElement.closest && c.parentElement.closest('a-scene')) continue;
-      try{
-        if(c.getContext && (c.getContext('webgl') || c.getContext('webgl2'))) continue;
-      }catch(e){}
-      c.classList.add('arjs-debug-ui');
-      c.style.cssText = [
-        'position:fixed','top:8px','left:8px','width:160px','height:120px',
-        'z-index:80','border:1px solid #2f7a58','border-radius:6px',
-        'background:#000','display:'+(show?'block':'none'),
-        'object-fit:contain','pointer-events:none'
-      ].join(' !important;') + ' !important;';
-      found++;
+    function log(msg, type = '') {
+      const div = document.createElement('div');
+      div.className = 'entry ' + type;
+      const now = new Date();
+      const t = now.toLocaleTimeString('ru-RU',{hour12:false})+'.'+String(now.getMilliseconds()).padStart(3,'0');
+      div.textContent = `[${t}] ${msg}`;
+      logPanel.appendChild(div);
+      logPanel.scrollTop = logPanel.scrollHeight;
+      console.log(`[${type||'log'}] ${msg}`);
     }
-    if(found && !pinArjsDebugCanvas._logged){
-      pinArjsDebugCanvas._logged = true;
-      console.log('AR.js debug canvas: ' + found);
+    log('BOOT', 'ok');
+
+    /* ---------- three.js setup ---------- */
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.01, 50);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.xr.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x222222, 1.2));
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(3,5,2); scene.add(sun);
+
+    const grid = new THREE.GridHelper(4,4,0x00aaff,0x555555);
+    grid.material.transparent = true; grid.material.opacity = 0.35;
+    scene.add(grid);
+    const floor = new THREE.Mesh(
+      new THREE.PlaneGeometry(4,4),
+      new THREE.MeshBasicMaterial({color:0x001133,transparent:true,opacity:0.2,side:THREE.DoubleSide})
+    );
+    floor.rotation.x = -Math.PI/2; scene.add(floor);
+
+    const s=0.35, d=1.3;
+    const cubeGeo = new THREE.BoxGeometry(s,s,s);
+    const colors = [0xff3366,0x33ff66,0x3366ff,0xffcc00];
+    [[-d,s/2,-d],[d,s/2,-d],[-d,s/2,d],[d,s/2,d]].forEach((pos,i)=>{
+      const m = new THREE.MeshStandardMaterial({color:colors[i],roughness:0.3,metalness:0.1});
+      const c = new THREE.Mesh(cubeGeo,m); c.position.set(...pos); scene.add(c);
+    });
+
+    /* ---------- target image loader ---------- */
+    async function makeGeneratedBitmap() {
+      log('Generating fallback bitmap...', 'warn');
+      const c = document.createElement('canvas');
+      c.width = 512; c.height = 512;
+      const ctx = c.getContext('2d');
+      ctx.fillStyle = '#f0f0f0'; ctx.fillRect(0,0,512,512);
+      for(let i=0;i<6000;i++){
+        ctx.fillStyle = Math.random()>0.5?'#fff':'#e0e0e0';
+        ctx.fillRect(Math.random()*512,Math.random()*512,2,2);
+      }
+      for(let i=0;i<40;i++){
+        ctx.fillStyle = `hsl(${Math.random()*360},70%,50%)`;
+        ctx.beginPath();
+        ctx.arc(Math.random()*512,Math.random()*512,Math.random()*25+10,0,Math.PI*2);
+        ctx.fill();
+      }
+      ctx.strokeStyle = '#333'; ctx.lineWidth = 4;
+      for(let i=0;i<20;i++){
+        ctx.beginPath();
+        ctx.moveTo(Math.random()*512,Math.random()*512);
+        ctx.lineTo(Math.random()*512,Math.random()*512);
+        ctx.stroke();
+      }
+      const blob = await new Promise(res => c.toBlob(res, 'image/png'));
+      const bmp = await createImageBitmap(blob);
+      log('Fallback bitmap 512x512 ready', 'ok');
+      return bmp;
     }
-  }
-  debugToggle.addEventListener('change', function(){ setDebugUi(debugToggle.checked); });
-  setDebugUi(true);
-  [400, 1000, 2000, 4000, 8000].forEach(function(ms){ setTimeout(pinArjsDebugCanvas, ms); });
-  if(window.MutationObserver){
-    new MutationObserver(function(muts){
-      for(var i=0;i<muts.length;i++){
-        var nodes = muts[i].addedNodes;
-        for(var j=0;j<nodes.length;j++){
-          if(nodes[j] && nodes[j].nodeName === 'CANVAS'){ pinArjsDebugCanvas(); return; }
+
+    async function loadTargetImage(src) {
+      log('Loading target from: ' + src, 'info');
+      try {
+        log('Trying fetch...', 'info');
+        const res = await fetch(src);
+        log('Fetch status: ' + res.status + ' ' + res.statusText, res.ok ? 'ok' : 'warn');
+        if (res.ok) {
+          const blob = await res.blob();
+          log('Blob: size=' + blob.size + ' type=' + blob.type, 'info');
+          const bmp = await createImageBitmap(blob);
+          log('Bitmap from fetch: ' + bmp.width + 'x' + bmp.height, 'ok');
+          return { bmp, source: 'fetch' };
+        }
+      } catch(e) {
+        log('Fetch failed: ' + e.message, 'err');
+      }
+
+      log('Trying Image() loader...', 'warn');
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => {
+          log('Image loaded: ' + img.width + 'x' + img.height, 'ok');
+          const c = document.createElement('canvas');
+          c.width = img.width; c.height = img.height;
+          c.getContext('2d').drawImage(img, 0, 0);
+          c.toBlob(async (blob) => {
+            const bmp = await createImageBitmap(blob);
+            log('Bitmap from Image(): ' + bmp.width + 'x' + bmp.height, 'ok');
+            resolve({ bmp, source: 'image' });
+          }, 'image/png');
+        };
+        img.onerror = () => {
+          log('Image() failed', 'err');
+          resolve(null);
+        };
+        img.src = src;
+      });
+    }
+
+    let targetBitmap = null;
+    let imageTrackingEnabled = false;
+    let xrSession = null;
+    let xrRefSpace = null;
+    let currentFrame = null;
+
+    const btnAr = document.getElementById('btn-ar');
+    const btnTest = document.getElementById('btn-test');
+    const hint = document.getElementById('hint');
+    const preview = document.getElementById('target-preview');
+
+    loadTargetImage('./assets/T1.jpg').then(async (result) => {
+      if (result && result.bmp) {
+        targetBitmap = result.bmp;
+        log('Target ready via ' + result.source, 'ok');
+        preview.src = './assets/T1.jpg';
+        preview.style.display = 'block';
+      } else {
+        log('All loaders failed, using generated fallback', 'err');
+        targetBitmap = await makeGeneratedBitmap();
+        const c = document.createElement('canvas');
+        c.width = 128; c.height = 128;
+        const ctx = c.getContext('2d');
+        ctx.fillStyle = '#f0f0f0'; ctx.fillRect(0,0,128,128);
+        ctx.fillStyle = '#ff0055'; ctx.fillRect(32,32,64,64);
+        preview.src = c.toDataURL();
+        preview.style.display = 'block';
+      }
+      hint.textContent = 'Нажмите «Start AR». Камера на 1.6 м. Покажите картинку.';
+      btnAr.disabled = false;
+    });
+
+    /* ---------- spheres & anchors ---------- */
+    const sphereGeo = new THREE.SphereGeometry(0.12,32,32);
+    const sphereMat = new THREE.MeshStandardMaterial({color:0xff00ff,roughness:0.2,metalness:0.5});
+    const trackedMarkers = new Map();
+    const testAnchors = [];
+
+    /* ---------- start AR ---------- */
+    btnAr.addEventListener('click', async () => {
+      btnAr.disabled = true;
+      log('>>> Start AR clicked', 'info');
+
+      if(!navigator.xr){ log('navigator.xr missing','err'); hint.textContent='WebXR не поддерживается'; return; }
+      const supported = await navigator.xr.isSessionSupported('immersive-ar').catch(()=>false);
+      log('immersive-ar supported: '+supported, supported?'ok':'err');
+      if(!supported){ hint.textContent='immersive-ar не поддерживается'; return; }
+
+      try {
+        log('Requesting session with dom-overlay...', 'info');
+        xrSession = await navigator.xr.requestSession('immersive-ar', {
+          requiredFeatures: ['local-floor'],
+          optionalFeatures: ['image-tracking', 'anchors', 'dom-overlay'],
+          trackedImages: [{ image: targetBitmap, widthInMeters: 0.2 }],
+          domOverlay: { root: document.body }
+        });
+      } catch(e) {
+        log('Session with dom-overlay failed: ' + e.message, 'warn');
+        log('Retrying without dom-overlay...', 'warn');
+        try {
+          xrSession = await navigator.xr.requestSession('immersive-ar', {
+            requiredFeatures: ['local-floor'],
+            optionalFeatures: ['image-tracking', 'anchors'],
+            trackedImages: [{ image: targetBitmap, widthInMeters: 0.2 }]
+          });
+        } catch(e2) {
+          log('Session request FAILED: '+e2.message, 'err');
+          hint.textContent='Ошибка запуска AR: '+e2.message;
+          btnAr.disabled = false;
+          return;
         }
       }
-    }).observe(document.body, {childList:true, subtree:true});
-  }
 
-  uiToggle.addEventListener('click', function(){
-    var hidden = document.body.classList.toggle('ui-hidden');
-    uiToggle.textContent = hidden ? 'UI+' : 'UI';
-  });
+      await renderer.xr.setSession(xrSession);
+      log('Renderer session set', 'ok');
 
-  scene.addEventListener('loaded', function(){ loader.style.display = 'none'; });
-  setTimeout(function(){ loader.style.display = 'none'; }, 4000);
-
-  setTimeout(function(){
-    var video = document.querySelector('video');
-    if(video) console.log('video ' + video.videoWidth + 'x' + video.videoHeight);
-    else console.warn('no video');
-  }, 2000);
-
-  var lastFs = '';
-  function forceCssSize(){
-    var w = window.innerWidth, h = window.innerHeight;
-    var video = document.querySelector('video');
-    var canvas = document.querySelector('canvas.a-canvas');
-    if(video){
-      video.style.setProperty('width', w+'px', 'important');
-      video.style.setProperty('height', h+'px', 'important');
-    }
-    if(canvas){
-      canvas.style.setProperty('width', w+'px', 'important');
-      canvas.style.setProperty('height', h+'px', 'important');
-    }
-    var key = w+'x'+h;
-    if(key !== lastFs){ lastFs = key; console.log('viewport '+key); }
-  }
-  [300,1000,2500].forEach(function(ms){ setTimeout(forceCssSize, ms); });
-  window.addEventListener('resize', function(){ setTimeout(forceCssSize, 50); });
-  window.addEventListener('orientationchange', function(){ setTimeout(forceCssSize, 300); });
-
-  function setStatus(found){
-    if(found){
-      statusPill.classList.add('found');
-      statusText.textContent = 'найден';
-      markerFrame.classList.add('found');
-    } else {
-      statusPill.classList.remove('found');
-      statusText.textContent = 'поиск…';
-      markerFrame.classList.remove('found');
-    }
-  }
-
-  var hiroAnchorPlaced = false;
-
-  function placeWorldAnchor(markerEl, label){
-    if(!markerEl || !markerEl.object3D) return;
-    var THREE = window.THREE || (window.AFRAME && window.AFRAME.THREE);
-    if(!THREE){
-      console.warn('THREE не найден, якорь не создан');
-      return;
-    }
-    var worldPos = new THREE.Vector3();
-    var worldQuat = new THREE.Quaternion();
-    markerEl.object3D.updateMatrixWorld(true);
-    markerEl.object3D.getWorldPosition(worldPos);
-    markerEl.object3D.getWorldQuaternion(worldQuat);
-
-    var anchor = document.createElement('a-entity');
-    anchor.setAttribute('id', 'world-anchor-' + label);
-    anchor.setAttribute('position', worldPos.x + ' ' + worldPos.y + ' ' + worldPos.z);
-
-    var text = document.createElement('a-text');
-    text.setAttribute('value', label);
-    text.setAttribute('position', '1 0 0');
-    text.setAttribute('align', 'center');
-    text.setAttribute('color', '#e7ecef');
-    text.setAttribute('width', '3.5');
-    text.setAttribute('scale', '1.2 1.2 1.2');
-    text.setAttribute('material', 'shader: flat; transparent: true');
-    anchor.appendChild(text);
-
-    scene.appendChild(anchor);
-
-    if (anchor.object3D) {
-      anchor.object3D.position.copy(worldPos);
-      anchor.object3D.quaternion.copy(worldQuat);
-    }
-
-    console.log('[AR] world anchor placed:', label, worldPos.toArray());
-  }
-
-  if(markerHiro){
-    markerHiro.addEventListener('markerFound', function(){
-      setStatus(true);
-      console.log('[AR] markerFound');
-      if(markerHiro.object3D){
-        markerHiro.object3D.visible = true;
-        markerHiro.object3D.traverse(function(o){ o.visible = true; });
+      try {
+        const enabled = xrSession.enabledFeatures || [];
+        log('enabledFeatures: ['+enabled.join(', ')+']', 'info');
+        imageTrackingEnabled = enabled.includes('image-tracking');
+      } catch(e) {
+        imageTrackingEnabled = true;
+        log('enabledFeatures not available, assuming image-tracking ok', 'warn');
       }
-      if(!hiroAnchorPlaced){
-        placeWorldAnchor(markerHiro, 'Hiro');
-        hiroAnchorPlaced = true;
-      }
-    });
-    markerHiro.addEventListener('markerLost', function(){
-      setStatus(false);
-      console.log('[AR] markerLost');
-    });
-  }
+      log('image-tracking active: '+imageTrackingEnabled, imageTrackingEnabled?'ok':'warn');
 
-})();
-</script>
+      let baseRef = await xrSession.requestReferenceSpace('local-floor');
+      const offset = new XRRigidTransform({x:0,y:-1.6,z:0});
+      xrRefSpace = baseRef.getOffsetReferenceSpace(offset);
+      renderer.xr.setReferenceSpace(xrRefSpace);
+      log('RefSpace: local-floor + Y=1.6m', 'ok');
+
+      hint.textContent = imageTrackingEnabled
+        ? 'AR активен. Наведите на картинку (реальный размер ~20 см).'
+        : 'AR активен. Image-tracking НЕ включён — используйте «Test Anchor».';
+      btnTest.disabled = false;
+
+      xrSession.addEventListener('end', () => {
+        log('Session ended', 'warn');
+        imageTrackingEnabled = false;
+        xrSession = null;
+        currentFrame = null;
+        btnAr.disabled = false;
+        btnTest.disabled = true;
+      });
+    });
+
+    /* ---------- manual test anchor ---------- */
+    btnTest.addEventListener('click', async () => {
+      if(!xrSession || !xrRefSpace || !currentFrame) {
+        log('No active frame for anchor', 'err');
+        return;
+      }
+      log('Test Anchor clicked', 'info');
+      
+      const vp = currentFrame.getViewerPose(xrRefSpace);
+      if(!vp){ log('No viewer pose','err'); return; }
+
+      const p = vp.transform.position;
+      const q = vp.transform.orientation;
+      const fwd = new THREE.Vector3(0,0,-1.5).applyQuaternion(new THREE.Quaternion(q.x,q.y,q.z,q.w));
+      const pos = {x:p.x+fwd.x, y:p.y+fwd.y, z:p.z+fwd.z};
+
+      try {
+        const anchor = await currentFrame.createAnchor(new XRRigidTransform(pos,q), xrRefSpace);
+        const sph = new THREE.Mesh(sphereGeo, new THREE.MeshStandardMaterial({color:0x00ff88,roughness:0.2,metalness:0.5}));
+        scene.add(sph);
+        testAnchors.push({anchor, sphere:sph});
+        log('Test anchor OK at '+pos.x.toFixed(2)+','+pos.y.toFixed(2)+','+pos.z.toFixed(2), 'ok');
+      } catch(e){ log('Test anchor FAILED: '+e.message, 'err'); }
+    });
+
+    /* ---------- render loop ---------- */
+    let frameCount = 0;
+    renderer.setAnimationLoop((time, frame) => {
+      frameCount++;
+      currentFrame = frame;
+
+      if(frame && xrRefSpace){
+        if(frameCount%150===0){
+          const vp = frame.getViewerPose(xrRefSpace);
+          if(vp){
+            const p = vp.transform.position;
+            log('Cam '+p.x.toFixed(2)+' '+p.y.toFixed(2)+' '+p.z.toFixed(2), 'info');
+          }
+        }
+
+        if(imageTrackingEnabled){
+          try {
+            const results = frame.getImageTrackingResults();
+            if(results.length>0 && frameCount%30===0){
+              log('Tracking results: '+results.length, 'info');
+            }
+            for(const result of results){
+              const state = result.trackingState;
+              const idx = result.index;
+              if(frameCount%30===0) log('['+idx+'] state='+state, state==='tracked'?'ok':'warn');
+
+              if(state==='tracked' && !trackedMarkers.has(idx)){
+                const pose = frame.getPose(result.imageSpace, xrRefSpace);
+                if(pose){
+                  log('['+idx+'] Creating anchor...', 'info');
+                  frame.createAnchor(pose.transform, xrRefSpace).then(anchor=>{
+                    const sph = new THREE.Mesh(sphereGeo, sphereMat);
+                    scene.add(sph);
+                    trackedMarkers.set(idx, {anchor, sphere:sph});
+                    log('['+idx+'] Anchor + sphere CREATED', 'ok');
+                    hint.textContent = 'Картинка найдена! Сфера зафиксирована.';
+                  }).catch(err=>{
+                    log('['+idx+'] Anchor failed: '+err.message, 'err');
+                  });
+                } else {
+                  log('['+idx+'] Pose is null', 'warn');
+                }
+              }
+              if(state==='ended' && trackedMarkers.has(idx)){
+                log('['+idx+'] Tracking ended (sphere stays)', 'warn');
+              }
+            }
+          } catch(e){
+            if(frameCount%60===0) log('getImageTrackingResults err: '+e.message, 'err');
+          }
+        }
+
+        for(const {anchor, sphere} of trackedMarkers.values()){
+          const pose = frame.getPose(anchor.anchorSpace, xrRefSpace);
+          if(pose){
+            const t = pose.transform;
+            sphere.position.set(t.position.x,t.position.y,t.position.z);
+            sphere.quaternion.set(t.orientation.x,t.orientation.y,t.orientation.z,t.orientation.w);
+          }
+        }
+        for(const {anchor, sphere} of testAnchors){
+          const pose = frame.getPose(anchor.anchorSpace, xrRefSpace);
+          if(pose){
+            const t = pose.transform;
+            sphere.position.set(t.position.x,t.position.y,t.position.z);
+            sphere.quaternion.set(t.orientation.x,t.orientation.y,t.orientation.z,t.orientation.w);
+          }
+        }
+      }
+
+      renderer.render(scene, camera);
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth/window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth,window.innerHeight);
+    });
+  </script>
 </body>
 </html>
