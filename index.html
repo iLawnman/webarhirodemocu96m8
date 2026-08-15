@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>AR Marker — распознавание и куб</title>
+<title>1 AR Marker — распознавание и куб</title>
 
 <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
@@ -92,6 +92,25 @@
   .hint b{color:var(--text);font-weight:600;}
 
   a-scene{position:fixed;inset:0;}
+
+  /* AR.js injects a raw <video> (camera feed) and a three.js <canvas> as
+     independent elements and repositions/resizes them with its own inline
+     styles. On some mobile browsers this recalculation runs again ~1s after
+     load (e.g. once the address bar collapses) and can compute a wrong,
+     collapsed size, making the feed shrink to a sliver and vanish. Pinning
+     both to the full viewport with !important always wins over AR.js's
+     inline styles and prevents that. object-fit:cover keeps the picture
+     filling the screen regardless of the internal capture resolution. */
+  video{
+    position:fixed !important; top:0 !important; left:0 !important;
+    width:100vw !important; height:100vh !important;
+    object-fit:cover !important; z-index:0 !important;
+  }
+  a-scene canvas, canvas.a-canvas{
+    position:fixed !important; top:0 !important; left:0 !important;
+    width:100vw !important; height:100vh !important;
+    z-index:1 !important; background:transparent !important;
+  }
 </style>
 </head>
 <body>
@@ -134,7 +153,7 @@
 <a-scene
   id="scene"
   vr-mode-ui="enabled: false"
-  renderer="logarithmicDepthBuffer: true; precision: mediump; antialias: true"
+  renderer="logarithmicDepthBuffer: true; precision: mediump; antialias: true; alpha: true"
   embedded
   arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
   loading-screen="enabled: false"
@@ -181,6 +200,16 @@
   });
   // fallback in case 'loaded' fires before listener attaches / or never fires quickly
   setTimeout(function(){ loader.style.display = 'none'; }, 4000);
+
+  // Mobile browsers often collapse the address bar ~1s after load, which
+  // changes window.innerHeight and makes AR.js recompute video/canvas size.
+  // Re-firing 'resize' after things settle nudges AR.js to redo that
+  // calculation against the final viewport instead of a transient one.
+  function nudgeResize(){ window.dispatchEvent(new Event('resize')); }
+  [400, 1000, 2000].forEach(function(ms){ setTimeout(nudgeResize, ms); });
+  window.addEventListener('orientationchange', function(){
+    setTimeout(nudgeResize, 300);
+  });
 
   function setStatus(found){
     if(found){
