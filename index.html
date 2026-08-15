@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>debug fix 2 AR Marker — распознавание и куб</title>
+<title>onscreen debug AR Marker — распознавание и куб</title>
 
 <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -130,6 +130,49 @@
   body.show-debug-ui canvas:not(.a-canvas){
     opacity:1;
   }
+
+  /* On-screen console for devices without devtools access (tablets, phones).
+     Mirrors console.log/warn/error and uncaught errors into a scrollable,
+     semi-transparent panel on the right so nothing is silent. */
+  #logPanel{
+    position:fixed; top:0; right:0; bottom:0; z-index:200;
+    width:min(78vw, 320px);
+    background:rgba(10,12,15,.82);
+    backdrop-filter:blur(2px);
+    border-left:1px solid var(--line);
+    display:flex; flex-direction:column;
+    transform:translateX(0);
+    transition:transform .2s ease;
+  }
+  #logPanel.hidden{ transform:translateX(100%); }
+  #logPanelHead{
+    flex:none; display:flex; align-items:center; justify-content:space-between;
+    padding:10px 10px; border-bottom:1px solid var(--line);
+    font-family:var(--mono); font-size:11px; color:var(--text-dim); letter-spacing:.05em;
+  }
+  #logPanelHead button{
+    font-family:var(--mono); font-size:11px; color:var(--text);
+    background:var(--panel); border:1px solid var(--line); border-radius:6px;
+    padding:4px 8px; cursor:pointer;
+  }
+  #logList{
+    flex:1; overflow-y:auto; padding:8px 10px 10px;
+    font-family:var(--mono); font-size:10.5px; line-height:1.45;
+  }
+  #logList .entry{ margin-bottom:6px; white-space:pre-wrap; word-break:break-word; }
+  #logList .t{ color:var(--text-dim); }
+  #logList .lvl-info{ color:var(--text); }
+  #logList .lvl-warn{ color:#e3c15e; }
+  #logList .lvl-error{ color:var(--danger); }
+  #logList .lvl-event{ color:var(--accent); }
+
+  #logToggleShow{
+    position:fixed; top:10px; right:10px; z-index:201;
+    font-family:var(--mono); font-size:11px; color:var(--text);
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:7px 10px; cursor:pointer; display:none;
+  }
+  #logPanel.hidden ~ #logToggleShow{ display:block; }
 </style>
 </head>
 <body>
@@ -176,6 +219,18 @@
   <p>Инициализация камеры…</p>
 </div>
 
+<div id="logPanel">
+  <div id="logPanelHead">
+    <span>ЛОГ</span>
+    <div style="display:flex;gap:6px;">
+      <button id="logClearBtn" type="button">очистить</button>
+      <button id="logHideBtn" type="button">✕</button>
+    </div>
+  </div>
+  <div id="logList"></div>
+</div>
+<button id="logToggleShow" type="button">лог</button>
+
 <a-scene
   id="scene"
   vr-mode-ui="enabled: false"
@@ -203,6 +258,60 @@
 
 <script>
 (function(){
+  // ---- on-screen console (for devices without devtools access) ----
+  var logList = document.getElementById('logList');
+  var logPanel = document.getElementById('logPanel');
+  var logHideBtn = document.getElementById('logHideBtn');
+  var logShowBtn = document.getElementById('logToggleShow');
+  var logClearBtn = document.getElementById('logClearBtn');
+  var logCount = 0;
+
+  function pad(n){ return n < 10 ? '0'+n : ''+n; }
+  function timeStr(){
+    var d = new Date();
+    return pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
+  }
+  function stringifyArg(a){
+    if(a instanceof Error) return a.message;
+    if(typeof a === 'object'){
+      try { return JSON.stringify(a); } catch(e){ return String(a); }
+    }
+    return String(a);
+  }
+  function logToPanel(level, args){
+    logCount++;
+    var line = document.createElement('div');
+    line.className = 'entry';
+    var msg = Array.prototype.map.call(args, stringifyArg).join(' ');
+    line.innerHTML = '<span class="t">['+timeStr()+']</span> <span class="lvl-'+level+'">'+
+      msg.replace(/</g,'&lt;') + '</span>';
+    logList.appendChild(line);
+    logList.scrollTop = logList.scrollHeight;
+    // keep it from growing forever on long sessions
+    if(logCount > 300){ logList.removeChild(logList.firstChild); }
+  }
+
+  ['log','warn','error'].forEach(function(level){
+    var original = console[level];
+    console[level] = function(){
+      logToPanel(level === 'log' ? 'info' : level, arguments);
+      original.apply(console, arguments);
+    };
+  });
+  window.addEventListener('error', function(e){
+    logToPanel('error', ['JS error: ' + e.message + ' (' + (e.filename||'').split('/').pop() + ':' + e.lineno + ')']);
+  });
+  window.addEventListener('unhandledrejection', function(e){
+    logToPanel('error', ['Promise rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)]);
+  });
+
+  logHideBtn.addEventListener('click', function(){ logPanel.classList.add('hidden'); });
+  logShowBtn.addEventListener('click', function(){ logPanel.classList.remove('hidden'); });
+  logClearBtn.addEventListener('click', function(){ logList.innerHTML = ''; logCount = 0; });
+
+  console.log('AR page script started');
+
+  // ---- app logic ----
   var scene = document.getElementById('scene');
   var loader = document.getElementById('loader');
   var statusPill = document.getElementById('statusPill');
@@ -217,6 +326,7 @@
   var fileInput = document.getElementById('pattFile');
   var fileBtn = document.getElementById('fileBtn');
   var fileBtnLabel = document.getElementById('fileBtnLabel');
+
 
   var activeMarker = markerHiro;
   var customObjectUrl = null;
@@ -251,10 +361,7 @@
   scene.addEventListener('camera-error', function(e){
     diagStatus.textContent = 'Ошибка камеры: ' + (e.detail && e.detail.error ? e.detail.error : 'нет доступа к камере. Открыт ли index.html через https:// или http://localhost?');
     diagStatus.style.color = 'var(--danger)';
-    console.error('[AR] camera-error', e.detail);
-  });
-  window.addEventListener('error', function(e){
-    console.error('[AR] window error:', e.message, e.filename, e.lineno);
+    console.error('camera-error:', e.detail);
   });
 
   debugToggle.addEventListener('change', function(){
@@ -263,9 +370,26 @@
 
   scene.addEventListener('loaded', function(){
     loader.style.display = 'none';
+    console.log('a-scene: loaded event fired');
   });
   // fallback in case 'loaded' fires before listener attaches / or never fires quickly
   setTimeout(function(){ loader.style.display = 'none'; }, 4000);
+
+  // Log a handful of AR.js/A-Frame lifecycle events that commonly reveal
+  // where things break (video never starting, context never ready, etc.)
+  ['renderstart','arjs-video-loaded','camera-init','ar-source-loaded'].forEach(function(evtName){
+    scene.addEventListener(evtName, function(e){ console.log('event:', evtName); });
+    window.addEventListener(evtName, function(e){ console.log('window event:', evtName); });
+  });
+  setTimeout(function(){
+    var video = document.querySelector('video');
+    if(video){
+      console.log('video element found, readyState=' + video.readyState + ' size=' + video.videoWidth + 'x' + video.videoHeight);
+      video.addEventListener('playing', function(){ console.log('video: playing'); });
+    } else {
+      console.warn('no <video> element found in DOM after 2s - camera source likely never initialised');
+    }
+  }, 2000);
 
   // Mobile browsers often collapse the address bar ~1s after load, which
   // changes window.innerHeight and makes AR.js recompute video/canvas size.
