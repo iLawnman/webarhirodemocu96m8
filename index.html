@@ -216,8 +216,8 @@
 >
   <a-assets></a-assets>
 
-  <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
-    <a-box position="0 0 1" depth="1" height="1" width="1"
+  <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="false">
+    <a-box position="0 0 0" depth="0.5" height="0.5" width="0.5"
            material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
     ></a-box>
   </a-marker>
@@ -435,7 +435,7 @@
 
       var text = document.createElement('a-text');
       text.setAttribute('value', label);
-      text.setAttribute('position', '1 0 0');
+      text.setAttribute('position', '0 0 0');
       text.setAttribute('align', 'center');
       text.setAttribute('color', '#e7ecef');
       text.setAttribute('width', '3.5');
@@ -462,9 +462,9 @@
       markerHiro.addEventListener('markerLost', function(){
         setStatus(false);
         console.log('[AR] markerLost');
-        if(!hiroAnchorPlaced && lastHiroPos && lastHiroQuat){
-          placeWorldAnchor(lastHiroPos, lastHiroQuat, 'Hiro');
-          hiroAnchorPlaced = true;
+        // if(!hiroAnchorPlaced && lastHiroPos && lastHiroQuat){
+        //   placeWorldAnchor(lastHiroPos, lastHiroQuat, 'Hiro');
+        //   hiroAnchorPlaced = true;
         }
       });
     }
