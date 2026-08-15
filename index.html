@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>Z 10 AR Marker Viewer</title>
+  <title>AnchorTXT AR Marker Viewer</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -459,11 +459,13 @@
       markerEl.object3D.getWorldPosition(worldPos);
       markerEl.object3D.getWorldQuaternion(worldQuat);
 
+      // Принудительно z = 10 (чтобы было видно)
+      worldPos.z = 10;
+
       // Отдельный якорь (не ребёнок маркера)
       var anchor = document.createElement('a-entity');
       anchor.setAttribute('id', 'world-anchor-' + label);
-      anchor.object3D.position.copy(worldPos);
-      anchor.object3D.quaternion.copy(worldQuat);
+      anchor.setAttribute('position', worldPos.x + ' ' + worldPos.y + ' ' + worldPos.z);
 
       // Текст, привязанный к якорю
       var text = document.createElement('a-text');
@@ -477,6 +479,12 @@
       anchor.appendChild(text);
 
       scene.appendChild(anchor);
+
+      // После добавления в сцену — ориентация
+      if (anchor.object3D) {
+        anchor.object3D.quaternion.copy(worldQuat);
+      }
+
       console.log('[AR] world anchor placed:', label, worldPos.toArray());
     }
 
