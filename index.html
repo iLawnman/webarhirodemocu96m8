@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>2 onscreen debug AR Marker — распознавание и куб</title>
+  <title>3 onscreen debug AR Marker — распознавание и куб</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -133,7 +133,8 @@
 
     /* On-screen console for devices without devtools access (tablets, phones).
        Mirrors console.log/warn/error and uncaught errors into a scrollable,
-       semi-transparent panel on the right so nothing is silent. */
+       semi-transparent panel on the right so nothing is silent.
+       Collapses to the right leaving a vertical "ear" (handle) to reopen. */
     #logPanel{
       position:fixed; top:0; right:0; bottom:0; z-index:200;
       width:min(78vw, 320px);
@@ -142,9 +143,43 @@
       border-left:1px solid var(--line);
       display:flex; flex-direction:column;
       transform:translateX(0);
-      transition:transform .2s ease;
+      transition:transform .25s ease;
     }
-    #logPanel.hidden{ transform:translateX(100%); }
+    /* Leave a thin vertical ear visible when collapsed */
+    #logPanel.hidden{
+      transform:translateX(calc(100% - 28px));
+    }
+    /* Vertical ear / handle on the left edge of the panel */
+    #logEar{
+      position:absolute;
+      left:0; top:50%;
+      transform:translate(-100%, -50%);
+      width:28px;
+      min-height:88px;
+      padding:12px 0;
+      display:flex; align-items:center; justify-content:center;
+      background:rgba(10,12,15,.92);
+      border:1px solid var(--line);
+      border-right:0;
+      border-radius:10px 0 0 10px;
+      cursor:pointer;
+      z-index:1;
+      -webkit-tap-highlight-color:transparent;
+      transition:background .15s, border-color .15s;
+    }
+    #logEar:hover, #logEar:active{
+      background:var(--panel);
+      border-color:var(--accent-dim);
+    }
+    #logEar span{
+      writing-mode:vertical-rl;
+      text-orientation:mixed;
+      transform:rotate(180deg);
+      font-family:var(--mono); font-size:11px; letter-spacing:.12em;
+      color:var(--text-dim);
+      user-select:none;
+    }
+    #logPanel:not(.hidden) #logEar span{ color:var(--accent); }
     #logPanelHead{
       flex:none; display:flex; align-items:center; justify-content:space-between;
       padding:10px 10px; border-bottom:1px solid var(--line);
@@ -165,14 +200,6 @@
     #logList .lvl-warn{ color:#e3c15e; }
     #logList .lvl-error{ color:var(--danger); }
     #logList .lvl-event{ color:var(--accent); }
-
-    #logToggleShow{
-      position:fixed; top:10px; right:10px; z-index:201;
-      font-family:var(--mono); font-size:11px; color:var(--text);
-      background:var(--panel); border:1px solid var(--line); border-radius:8px;
-      padding:7px 10px; cursor:pointer; display:none;
-    }
-    #logPanel.hidden ~ #logToggleShow{ display:block; }
   </style>
 </head>
 <body>
@@ -220,6 +247,9 @@
 </div>
 
 <div id="logPanel">
+  <button id="logEar" type="button" title="Свернуть / раскрыть лог" aria-label="Свернуть или раскрыть лог">
+    <span>ЛОГ</span>
+  </button>
   <div id="logPanelHead">
     <span>ЛОГ</span>
     <div style="display:flex;gap:6px;">
@@ -229,7 +259,6 @@
   </div>
   <div id="logList"></div>
 </div>
-<button id="logToggleShow" type="button">лог</button>
 
 <a-scene
         id="scene"
@@ -249,11 +278,11 @@
   </a-marker>
 
   <!-- No url until user selects a .patt — empty url causes "Pattern Data read error /marker_1" -->
-<!--  <a-marker id="markerCustom" type="pattern" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" visible="false">-->
-<!--    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"-->
-<!--           animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">-->
-<!--    </a-box>-->
-<!--  </a-marker>-->
+  <!--  <a-marker id="markerCustom" type="pattern" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" visible="false">-->
+  <!--    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"-->
+  <!--           animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">-->
+  <!--    </a-box>-->
+  <!--  </a-marker>-->
 
   <a-entity camera></a-entity>
 </a-scene>
@@ -264,7 +293,7 @@
     var logList = document.getElementById('logList');
     var logPanel = document.getElementById('logPanel');
     var logHideBtn = document.getElementById('logHideBtn');
-    var logShowBtn = document.getElementById('logToggleShow');
+    var logEar = document.getElementById('logEar');
     var logClearBtn = document.getElementById('logClearBtn');
     var logCount = 0;
 
@@ -307,8 +336,11 @@
       logToPanel('error', ['Promise rejection: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)]);
     });
 
+    function toggleLogPanel(){
+      logPanel.classList.toggle('hidden');
+    }
     logHideBtn.addEventListener('click', function(){ logPanel.classList.add('hidden'); });
-    logShowBtn.addEventListener('click', function(){ logPanel.classList.remove('hidden'); });
+    logEar.addEventListener('click', toggleLogPanel);
     logClearBtn.addEventListener('click', function(){ logList.innerHTML = ''; logCount = 0; });
 
     console.log('AR page script started');
