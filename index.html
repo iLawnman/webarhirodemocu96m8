@@ -3,47 +3,39 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>2 AR Marker Viewer</title>
+  <title>3 AR Marker Viewer</title>
 
-  <!-- Official combo from AR.js docs: A-Frame 1.6.0 + AR.js 3.4.7 -->
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
 
   <style>
     :root{
-      --panel:#12161b;
-      --line:#232a31;
-      --accent:#5ee3a5;
-      --accent-dim:#2f7a58;
-      --text:#e7ecef;
-      --text-dim:#8a97a3;
-      --danger:#e35e5e;
+      --panel:#12161b; --line:#232a31; --accent:#5ee3a5; --accent-dim:#2f7a58;
+      --text:#e7ecef; --text-dim:#8a97a3; --danger:#e35e5e;
       --mono:"IBM Plex Mono",Consolas,monospace;
     }
     *{box-sizing:border-box;}
     html,body{margin:0;padding:0;width:100%;height:100%;overflow:hidden;background:#000;color:var(--text);font-family:system-ui,sans-serif;}
 
-    /* Do NOT force video/canvas to 100vw×100vh — that breaks AR.js
-       projection and the  detaches from the marker even when found. */
-
     .chrome{
       position:fixed;left:0;right:0;bottom:0;z-index:50;
       padding:10px 12px calc(10px + env(safe-area-inset-bottom));
-      background:linear-gradient(0deg,rgba(0,0,0,.85),rgba(0,0,0,.4) 70%,transparent);
+      background:linear-gradient(0deg,rgba(0,0,0,.85),rgba(0,0,0,.35) 70%,transparent);
       display:flex;gap:8px;align-items:center;flex-wrap:wrap;
       transition:opacity .2s,transform .2s;
     }
     body.ui-hidden .chrome{opacity:0;pointer-events:none;transform:translateY(12px);}
 
     .pill{
-      font-family:var(--mono);font-size:11px;
-      padding:6px 10px;border-radius:14px;
+      font-family:var(--mono);font-size:11px;padding:6px 10px;border-radius:14px;
       background:var(--panel);border:1px solid var(--line);color:var(--text-dim);
       display:inline-flex;align-items:center;gap:6px;
     }
     .pill .led{width:6px;height:6px;border-radius:50%;background:var(--text-dim);}
     .pill.found{border-color:var(--accent-dim);color:var(--accent);}
     .pill.found .led{background:var(--accent);box-shadow:0 0 6px var(--accent);}
+    .pill.bad{border-color:var(--danger);color:var(--danger);}
+    .pill.bad .led{background:var(--danger);}
 
     .chip{
       font-family:var(--mono);font-size:11px;color:var(--text-dim);
@@ -52,7 +44,6 @@
     }
     .chip.on{border-color:var(--accent-dim);color:var(--accent);}
     .chip input{margin:0;}
-
     #diag{font-family:var(--mono);font-size:10px;color:var(--text-dim);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 
     #uiToggle{
@@ -63,17 +54,14 @@
     }
     body.ui-hidden #uiToggle{border-color:var(--accent-dim);color:var(--accent);}
 
-    /* AR.js debug canvas (threshold view) */
     canvas.arjs-debug-ui{
       position:fixed !important;top:8px !important;left:8px !important;
-      width:140px !important;height:105px !important;
-      z-index:40 !important;border:1px solid var(--accent-dim) !important;
-      border-radius:6px !important;background:#000 !important;
-      pointer-events:none !important;
+      width:140px !important;height:105px !important;z-index:40 !important;
+      border:1px solid var(--accent-dim) !important;border-radius:6px !important;
+      background:#000 !important;pointer-events:none !important;
     }
     body:not(.show-debug) canvas.arjs-debug-ui{display:none !important;}
 
-    /* log */
     #logPanel{
       position:fixed;top:0;right:0;bottom:0;z-index:100;
       width:min(70vw,280px);background:rgba(10,12,15,.9);
@@ -88,7 +76,7 @@
       border-radius:8px 0 0 8px;cursor:pointer;
     }
     #logEar span{writing-mode:vertical-rl;transform:rotate(180deg);font-family:var(--mono);font-size:10px;color:var(--text-dim);}
-    #logHead{padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;}
+    #logHead{padding:8px 10px;border-bottom:1px solid var(--line);font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;justify-content:space-between;align-items:center;}
     #logHead button{font-family:var(--mono);font-size:11px;background:var(--panel);border:1px solid var(--line);border-radius:6px;color:var(--text);padding:3px 8px;cursor:pointer;}
     #logList{flex:1;overflow:auto;padding:8px;font-family:var(--mono);font-size:10px;line-height:1.4;}
     #logList .e{margin-bottom:4px;word-break:break-word;}
@@ -98,20 +86,33 @@
 
     .loader{
       position:fixed;inset:0;z-index:9999;background:#000;
-      display:flex;align-items:center;justify-content:center;flex-direction:column;gap:10px;
+      display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;
       font-family:var(--mono);font-size:12px;color:var(--text-dim);
+      transition:opacity .25s;
     }
+    .loader.hide{opacity:0;pointer-events:none;}
     .loader .sp{
       width:26px;height:26px;border-radius:50%;
       border:3px solid #333;border-top-color:var(--accent);
       animation:spin .8s linear infinite;
     }
     @keyframes spin{to{transform:rotate(360deg);}}
+    .loader .sub{font-size:10px;color:#666;max-width:260px;text-align:center;line-height:1.4;}
+    .loader button{
+      margin-top:6px;font-family:var(--mono);font-size:11px;
+      background:var(--panel);border:1px solid var(--line);color:var(--text);
+      border-radius:8px;padding:8px 14px;cursor:pointer;
+    }
   </style>
 </head>
 <body class="show-debug">
 
-<div class="loader" id="loader"><div class="sp"></div><span>камера…</span></div>
+<div class="loader" id="loader">
+  <div class="sp"></div>
+  <span id="loaderText">запрос камеры…</span>
+  <span class="sub" id="loaderSub">Разрешите доступ к камере. Нужен https:// или localhost.</span>
+  <button type="button" id="loaderSkip" style="display:none">скрыть и смотреть лог</button>
+</div>
 
 <div class="chrome">
   <div class="pill" id="statusPill"><span class="led"></span><span id="statusText">поиск…</span></div>
@@ -126,20 +127,17 @@
   <div id="logList"></div>
 </div>
 
-<!-- Minimal AR.js scene — mirrors official basic example.
-      is a CHILD of a-marker so it follows the tracked pose. -->
 <a-scene
   id="scene"
   embedded
   vr-mode-ui="enabled: false"
   renderer="antialias: true; alpha: true; precision: mediump"
-  arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono; trackingMethod: best;"
+  arjs="sourceType: webcam; debugUIEnabled: true; detectionMode: mono;"
   loading-screen="enabled: false"
 >
   <a-marker id="marker" preset="hiro" emitevents="true">
-    <!-- Bright  sitting on the marker plane (Y up in marker space) -->
     <a-box
-      id=""
+      id="cube"
       position="0 0.5 0"
       width="1" height="1" depth="1"
       color="#ff2d55"
@@ -147,7 +145,6 @@
       animation="property: rotation; to: 0 360 0; loop: true; dur: 4000; easing: linear">
     </a-box>
   </a-marker>
-
   <a-entity camera></a-entity>
 </a-scene>
 
@@ -156,7 +153,7 @@
   var logList = document.getElementById('logList');
   var logPanel = document.getElementById('logPanel');
   var n = 0;
-  function t() {
+  function ts() {
     var d = new Date();
     return ('0' + d.getHours()).slice(-2) + ':' + ('0' + d.getMinutes()).slice(-2) + ':' + ('0' + d.getSeconds()).slice(-2);
   }
@@ -164,7 +161,7 @@
     n++;
     var el = document.createElement('div');
     el.className = 'e';
-    el.innerHTML = '<span class="t">[' + t() + ']</span> <span class="' + (cls || '') + '">' + String(msg).replace(/</g, '&lt;') + '</span>';
+    el.innerHTML = '<span class="t">[' + ts() + ']</span> <span class="' + (cls || '') + '">' + String(msg).replace(/</g, '&lt;') + '</span>';
     logList.appendChild(el);
     logList.scrollTop = logList.scrollHeight;
     if (n > 150 && logList.firstChild) logList.removeChild(logList.firstChild);
@@ -177,29 +174,123 @@
         if (typeof a === 'object') { try { return JSON.stringify(a); } catch (e) { return String(a); } }
         return String(a);
       }).join(' ');
-      panelLog(lvl === 'error' ? 'err' : (lvl === 'warn' ? '' : ''), msg);
+      panelLog(lvl === 'error' ? 'err' : '', msg);
       orig.apply(console, arguments);
     };
   });
   window.addEventListener('error', function (e) { panelLog('err', 'JS: ' + e.message); });
+  window.addEventListener('unhandledrejection', function (e) {
+    panelLog('err', 'Promise: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
 
   document.getElementById('logEar').onclick = function () { logPanel.classList.toggle('hidden'); };
   document.getElementById('logClear').onclick = function () { logList.innerHTML = ''; n = 0; };
 
   var scene = document.getElementById('scene');
   var marker = document.getElementById('marker');
-  var  = document.getElementById('');
+  var cube = document.getElementById('cube');
   var statusPill = document.getElementById('statusPill');
   var statusText = document.getElementById('statusText');
   var diag = document.getElementById('diag');
   var loader = document.getElementById('loader');
+  var loaderText = document.getElementById('loaderText');
+  var loaderSub = document.getElementById('loaderSub');
+  var loaderSkip = document.getElementById('loaderSkip');
   var debugToggle = document.getElementById('debugToggle');
   var debugChip = document.getElementById('debugChip');
+  var cameraReady = false;
 
-  function setFound(on) {
-    statusPill.classList.toggle('found', on);
-    statusText.textContent = on ? 'маркер · куб' : 'поиск…';
+  function hideLoader() {
+    loader.classList.add('hide');
+    setTimeout(function () { loader.style.display = 'none'; }, 300);
   }
+  function showLoaderError(title, sub) {
+    loaderText.textContent = title;
+    loaderSub.textContent = sub;
+    loaderSkip.style.display = 'block';
+    statusPill.classList.add('bad');
+    statusText.textContent = 'камера ×';
+    diag.textContent = title;
+    diag.style.color = 'var(--danger)';
+  }
+  loaderSkip.onclick = function () {
+    hideLoader();
+    logPanel.classList.remove('hidden');
+  };
+
+  // Secure context check (getUserMedia needs https or localhost)
+  var isSecure = window.isSecureContext || location.protocol === 'https:' ||
+    location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+  console.log('start v9 · secure=' + isSecure + ' · ' + location.protocol + '//' + location.host);
+  if (!isSecure) {
+    showLoaderError('нужен https / localhost', 'file:// и обычный http блокируют камеру');
+    console.error('Not a secure context — camera blocked');
+  } else {
+    loaderText.textContent = 'инициализация камеры…';
+  }
+
+  // AR.js / A-Frame camera lifecycle
+  function onCameraOk(src) {
+    if (cameraReady) return;
+    cameraReady = true;
+    console.log('camera ok (' + src + ')');
+    hideLoader();
+    diag.textContent = 'камера ✓';
+    diag.style.color = 'var(--accent)';
+  }
+  scene.addEventListener('camera-init', function () { onCameraOk('camera-init'); });
+  scene.addEventListener('arjs-video-loaded', function () { onCameraOk('arjs-video-loaded'); });
+  window.addEventListener('camera-init', function () { onCameraOk('window camera-init'); });
+  window.addEventListener('arjs-video-loaded', function () { onCameraOk('window arjs-video-loaded'); });
+
+  scene.addEventListener('camera-error', function (e) {
+    var detail = e.detail && (e.detail.error || e.detail.message || JSON.stringify(e.detail));
+    console.error('camera-error', detail || e.detail);
+    showLoaderError('ошибка камеры', String(detail || 'отказано в доступе или нет устройства'));
+  });
+  window.addEventListener('camera-error', function (e) {
+    console.error('window camera-error', e.detail);
+  });
+
+  scene.addEventListener('loaded', function () {
+    console.log('a-scene loaded');
+    // Don't hide loader solely on scene loaded — wait for video if possible
+    setTimeout(function () {
+      var v = document.querySelector('video');
+      if (v && v.readyState >= 2) onCameraOk('video readyState');
+    }, 300);
+  });
+
+  // Poll for <video> appearing (AR.js injects it)
+  var polls = 0;
+  var pollTimer = setInterval(function () {
+    polls++;
+    var v = document.querySelector('video');
+    if (v) {
+      console.log('video el · readyState=' + v.readyState + ' · ' + v.videoWidth + 'x' + v.videoHeight);
+      if (v.readyState >= 2 || (v.videoWidth > 0 && v.videoHeight > 0)) {
+        onCameraOk('video poll');
+        clearInterval(pollTimer);
+      }
+      v.addEventListener('playing', function () { onCameraOk('video playing'); }, { once: true });
+      v.addEventListener('loadeddata', function () { onCameraOk('video loadeddata'); }, { once: true });
+    }
+    if (polls >= 20) {
+      clearInterval(pollTimer);
+      if (!cameraReady) {
+        showLoaderError('камера не стартовала', 'проверьте разрешение и https/localhost · смотрите лог');
+        console.warn('no working video after ~10s');
+      }
+    }
+  }, 500);
+
+  // Hard timeout — never stay stuck forever
+  setTimeout(function () {
+    if (!cameraReady) {
+      showLoaderError('таймаут камеры', 'нажмите «скрыть» и смотрите лог справа');
+      console.warn('camera timeout 12s');
+    }
+  }, 12000);
 
   function pinDebug() {
     var show = document.body.classList.contains('show-debug');
@@ -223,42 +314,28 @@
     debugChip.classList.toggle('on', debugToggle.checked);
     pinDebug();
   };
-  [500, 1500, 3000, 6000].forEach(function (ms) { setTimeout(pinDebug, ms); });
+  [800, 2000, 4000].forEach(function (ms) { setTimeout(pinDebug, ms); });
 
   document.getElementById('uiToggle').onclick = function () {
     var h = document.body.classList.toggle('ui-hidden');
     this.textContent = h ? 'UI+' : 'UI';
   };
 
-  scene.addEventListener('loaded', function () {
-    loader.style.display = 'none';
-    console.log('scene loaded');
-  });
-  scene.addEventListener('camera-error', function (e) {
-    diag.textContent = 'нет камеры / нужен https';
-    diag.style.color = 'var(--danger)';
-    console.error('camera-error', e.detail);
-  });
-  setTimeout(function () { loader.style.display = 'none'; }, 5000);
-
+  function setFound(on) {
+    statusPill.classList.toggle('found', on);
+    statusPill.classList.remove('bad');
+    statusText.textContent = on ? 'маркер · куб' : 'поиск…';
+  }
   marker.addEventListener('markerFound', function () {
     setFound(true);
     console.log('[AR] markerFound');
-    // Ensure hierarchy is visible —  is child of marker, so it
-    // inherits the marker pose automatically.
     if (marker.object3D) marker.object3D.visible = true;
-    if ( && .object3D) {
-      .object3D.visible = true;
-      var p = .object3D.getWorldPosition(new THREE.Vector3());
-      console.log('[AR]  world pos', p.x.toFixed(2), p.y.toFixed(2), p.z.toFixed(2));
-    }
+    if (cube && cube.object3D) cube.object3D.visible = true;
   });
   marker.addEventListener('markerLost', function () {
     setFound(false);
     console.log('[AR] markerLost');
   });
-
-  console.log('AR v8 — preset hiro, cube child of marker');
 })();
 </script>
 </body>
