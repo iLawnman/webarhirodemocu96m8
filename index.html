@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>5 Anchor AR Marker Viewer</title>
+  <title>6 Anchor AR Marker Viewer</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -217,7 +217,7 @@
   <a-assets></a-assets>
 
   <a-marker id="markerHiro" type="pattern" preset="hiro" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="5" smoothTolerance="0.01" smoothThreshold="2">
-    <a-box position="0 0 0" depth="1" height="1" width="1"
+    <a-box position="0 0 1" depth="1" height="1" width="1"
            material="color:#5ee3a5; emissive:#2f7a58; emissiveIntensity:0.45; metalness:0.1; roughness:0.4"
     ></a-box>
   </a-marker>
@@ -402,128 +402,52 @@
       }
     }
 
-    /* Якорь:
-       - при первом markerFound создаётся как ребёнок маркера
-       - при markerLost отцепляется в сцену и замораживает позу
-       - больше не удаляется и не прячется
-       - при повторных found просто остаётся (уже frozen) */
-    var hiroAnchor = null;
-    var hiroAnchorFrozen = false;
+    /* Постоянный мировой якорь.
+       Позиция маркера пишется каждый кадр, пока он виден (пока сглаживание
+       смещения не сойдётся), а якорь фиксируется по ПОСЛЕДНЕЙ достоверной
+       позе уже в момент markerLost — на markerFound матрица ещё не сошлась
+       и координаты могут указывать почти в точку камеры. */
+    var hiroAnchorPlaced = false;
+    var lastHiroPos = null;
+    var lastHiroQuat = null;
 
-    function forceVisible(el){
-      if(!el) return;
-      el.setAttribute('visible', true);
-      if(el.object3D){
-        el.object3D.visible = true;
-        el.object3D.traverse(function(o){ o.visible = true; });
-      }
+    if(markerHiro){
+      AFRAME.registerComponent('pose-tracker', {
+        init: function(){
+          this.tmpPos = new THREE.Vector3();
+          this.tmpQuat = new THREE.Quaternion();
+        },
+        tick: function(){
+          if(!this.el.object3D.visible) return;
+          this.el.object3D.updateMatrixWorld(true);
+          this.el.object3D.getWorldPosition(this.tmpPos);
+          this.el.object3D.getWorldQuaternion(this.tmpQuat);
+          lastHiroPos = this.tmpPos.clone();
+          lastHiroQuat = this.tmpQuat.clone();
+        }
+      });
+      markerHiro.setAttribute('pose-tracker', '');
     }
 
-    function createAnchorOnMarker(markerEl, label){
-      // Уже есть (даже если frozen) — не трогаем
-      if(hiroAnchor){
-        forceVisible(hiroAnchor);
-        return;
-      }
-
+    function placeWorldAnchor(pos, quat, label){
       var anchor = document.createElement('a-entity');
       anchor.setAttribute('id', 'world-anchor-' + label);
-      anchor.setAttribute('visible', true);
-
-      var pin = document.createElement('a-box');
-      pin.setAttribute('width', '0.25');
-      pin.setAttribute('height', '0.25');
-      pin.setAttribute('depth', '0.25');
-      pin.setAttribute('position', '0 0.15 0');
-      pin.setAttribute('material', 'color:#ffcc00; emissive:#aa8800; emissiveIntensity:0.6');
-      pin.setAttribute('visible', true);
-      anchor.appendChild(pin);
 
       var text = document.createElement('a-text');
       text.setAttribute('value', label);
-      text.setAttribute('position', '0 0.7 0');
+      text.setAttribute('position', '1 0 0');
       text.setAttribute('align', 'center');
-      text.setAttribute('anchor', 'center');
-      text.setAttribute('baseline', 'center');
-      text.setAttribute('color', '#ffffff');
-      text.setAttribute('width', '6');
-      text.setAttribute('scale', '2 2 2');
-      text.setAttribute('side', 'double');
-      text.setAttribute('visible', true);
+      text.setAttribute('color', '#e7ecef');
+      text.setAttribute('width', '3.5');
+      text.setAttribute('scale', '1.2 1.2 1.2');
+      text.setAttribute('material', 'shader: flat; transparent: true');
       anchor.appendChild(text);
 
-      markerEl.appendChild(anchor);
-      hiroAnchor = anchor;
-      forceVisible(anchor);
-      console.log('[AR] anchor created on marker:', label);
-    }
+      scene.appendChild(anchor);
+      anchor.object3D.position.copy(pos);
+      anchor.object3D.quaternion.copy(quat);
 
-    // Последняя стабильная world-матрица (пишется пока маркер виден)
-    var lastWorldMatrix = null;
-    var captureTimer = null;
-
-    function captureAnchorMatrix(){
-      if(!hiroAnchor || !hiroAnchor.object3D || hiroAnchorFrozen) return;
-      var THREE = window.THREE || (window.AFRAME && window.AFRAME.THREE);
-      if(!THREE) return;
-      hiroAnchor.object3D.updateMatrixWorld(true);
-      if(!lastWorldMatrix) lastWorldMatrix = new THREE.Matrix4();
-      lastWorldMatrix.copy(hiroAnchor.object3D.matrixWorld);
-    }
-
-    function freezeAnchorToWorld(){
-      if(!hiroAnchor || hiroAnchorFrozen) return;
-      var THREE = window.THREE || (window.AFRAME && window.AFRAME.THREE);
-      if(!THREE || !hiroAnchor.object3D){
-        console.warn('[AR] freeze failed: no object3D');
-        return;
-      }
-
-      if(captureTimer){
-        clearInterval(captureTimer);
-        captureTimer = null;
-      }
-
-      // Финальный capture на случай, если таймер не успел
-      captureAnchorMatrix();
-
-      var matrix = lastWorldMatrix;
-      if(!matrix){
-        hiroAnchor.object3D.updateMatrixWorld(true);
-        matrix = hiroAnchor.object3D.matrixWorld.clone();
-      }
-
-      var worldPos = new THREE.Vector3();
-      var worldQuat = new THREE.Quaternion();
-      var worldScale = new THREE.Vector3(1, 1, 1);
-      matrix.decompose(worldPos, worldQuat, worldScale);
-
-      var obj = hiroAnchor.object3D;
-      var sceneObj = scene.object3D;
-
-      // Three.js reparent
-      if(obj.parent) obj.parent.remove(obj);
-      sceneObj.add(obj);
-
-      // DOM reparent
-      if(hiroAnchor.parentElement && hiroAnchor.parentElement !== scene){
-        scene.appendChild(hiroAnchor);
-      }
-
-      obj.matrixAutoUpdate = true;
-      obj.position.copy(worldPos);
-      obj.quaternion.copy(worldQuat);
-      obj.scale.copy(worldScale);
-      obj.updateMatrix();
-      obj.updateMatrixWorld(true);
-
-      hiroAnchor.setAttribute('position', {
-        x: worldPos.x, y: worldPos.y, z: worldPos.z
-      });
-
-      forceVisible(hiroAnchor);
-      hiroAnchorFrozen = true;
-      console.log('[AR] anchor frozen:', worldPos.x.toFixed(3), worldPos.y.toFixed(3), worldPos.z.toFixed(3));
+      console.log('[AR] world anchor placed:', label, pos.toArray());
     }
 
     if(markerHiro){
@@ -534,22 +458,14 @@
           markerHiro.object3D.visible = true;
           markerHiro.object3D.traverse(function(o){ o.visible = true; });
         }
-        createAnchorOnMarker(markerHiro, 'Hiro');
-        if(hiroAnchorFrozen){
-          forceVisible(hiroAnchor);
-        } else {
-          // Пока маркер виден — постоянно сохраняем стабильную матрицу
-          captureAnchorMatrix();
-          if(captureTimer) clearInterval(captureTimer);
-          captureTimer = setInterval(captureAnchorMatrix, 100);
-        }
       });
       markerHiro.addEventListener('markerLost', function(){
         setStatus(false);
         console.log('[AR] markerLost');
-        freezeAnchorToWorld();
-        setTimeout(function(){ forceVisible(hiroAnchor); }, 0);
-        setTimeout(function(){ forceVisible(hiroAnchor); }, 100);
+        if(!hiroAnchorPlaced && lastHiroPos && lastHiroQuat){
+          placeWorldAnchor(lastHiroPos, lastHiroQuat, 'Hiro');
+          hiroAnchorPlaced = true;
+        }
       });
     }
 
