@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-  <title>1 hiro AR Marker — распознавание и куб</title>
+  <title>2 hiro AR Marker — распознавание и куб</title>
 
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://raw.githack.com/AR-js-org/AR.js/3.4.7/aframe/build/aframe-ar.js"></script>
@@ -43,6 +43,7 @@
       padding:12px 16px;
       background:linear-gradient(180deg, rgba(11,13,16,.92), rgba(11,13,16,0));
       pointer-events:none;
+      transition:opacity .2s, transform .2s;
     }
     .brand{display:flex;align-items:center;gap:8px;pointer-events:auto;}
     .brand .dot{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
@@ -66,6 +67,41 @@
       padding:14px 16px calc(16px + env(safe-area-inset-bottom));
       background:linear-gradient(0deg, rgba(11,13,16,.95), rgba(11,13,16,.65) 70%, rgba(11,13,16,0));
       display:flex;flex-direction:column;gap:10px;
+      transition:opacity .2s, transform .2s;
+    }
+
+    /* Hide chrome UI (top + bottom). Log panel stays independently collapsible. */
+    body.ui-hidden .topbar,
+    body.ui-hidden .panel{
+      opacity:0;
+      pointer-events:none;
+      transform:translateY(-8px);
+    }
+    body.ui-hidden .panel{ transform:translateY(12px); }
+
+    /* Always-visible floating control to restore / hide UI */
+    #uiToggle{
+      position:fixed;
+      bottom:calc(16px + env(safe-area-inset-bottom));
+      left:16px;
+      z-index:90;
+      font-family:var(--mono); font-size:11px; letter-spacing:.04em;
+      color:var(--text);
+      background:rgba(18,22,27,.9);
+      border:1px solid var(--line);
+      border-radius:10px;
+      padding:9px 12px;
+      cursor:pointer;
+      -webkit-tap-highlight-color:transparent;
+      transition:border-color .15s, color .15s, background .15s;
+    }
+    #uiToggle:hover, #uiToggle:active{
+      border-color:var(--accent-dim);
+      color:var(--accent);
+    }
+    body.ui-hidden #uiToggle{
+      border-color:var(--accent-dim);
+      color:var(--accent);
     }
     .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
     .field-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim);margin-bottom:6px;display:block;}
@@ -132,7 +168,7 @@
       position:fixed !important;
       top:10px !important; left:10px !important;
       width:200px !important; height:auto !important;
-      z-index:70 !important;
+      z-index:85 !important;
       border:1px solid var(--accent-dim) !important;
       border-radius:8px !important;
       opacity:0;
@@ -140,7 +176,7 @@
       transition:opacity .15s;
     }
     body.show-debug-ui canvas:not(.a-canvas){
-      opacity:1;
+      opacity:1 !important;
     }
 
     /* On-screen console for devices without devtools access (tablets, phones).
@@ -253,12 +289,14 @@
   </div>
 </div>
 
+<button id="uiToggle" type="button" title="Скрыть / показать интерфейс">UI скрыть</button>
+
 <div class="arjs-loader" id="loader">
   <div class="spinner"></div>
   <p>Инициализация камеры…</p>
 </div>
 
-<div id="logPanel">
+<div id="logPanel" class="hidden">
   <button id="logEar" type="button" title="Свернуть / раскрыть лог" aria-label="Свернуть или раскрыть лог">
     <span>ЛОГ</span>
   </button>
@@ -290,11 +328,11 @@
   </a-marker>
 
   <!-- No url until user selects a .patt — empty url causes "Pattern Data read error /marker_1" -->
-<!--  <a-marker id="markerCustom" type="pattern" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" visible="false">-->
-<!--    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"-->
-<!--           animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">-->
-<!--    </a-box>-->
-<!--  </a-marker>-->
+  <!--  <a-marker id="markerCustom" type="pattern" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" visible="false">-->
+  <!--    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"-->
+  <!--           animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">-->
+  <!--    </a-box>-->
+  <!--  </a-marker>-->
 
   <a-entity camera></a-entity>
 </a-scene>
@@ -414,32 +452,31 @@
       document.body.classList.toggle('show-debug-ui', debugToggle.checked);
     });
 
+    var uiToggle = document.getElementById('uiToggle');
+    uiToggle.addEventListener('click', function(){
+      var hidden = document.body.classList.toggle('ui-hidden');
+      uiToggle.textContent = hidden ? 'UI показать' : 'UI скрыть';
+    });
+
     scene.addEventListener('loaded', function(){
       loader.style.display = 'none';
-      console.log('a-scene: loaded event fired');
     });
     // fallback in case 'loaded' fires before listener attaches / or never fires quickly
     setTimeout(function(){ loader.style.display = 'none'; }, 4000);
 
-    // Log a handful of AR.js/A-Frame lifecycle events that commonly reveal
-    // where things break (video never starting, context never ready, etc.)
-    ['renderstart','arjs-video-loaded','camera-init','ar-source-loaded'].forEach(function(evtName){
-      scene.addEventListener(evtName, function(e){ console.log('event:', evtName); });
-      window.addEventListener(evtName, function(e){ console.log('window event:', evtName); });
-    });
     setTimeout(function(){
       var video = document.querySelector('video');
       if(video){
-        console.log('video element found, readyState=' + video.readyState + ' size=' + video.videoWidth + 'x' + video.videoHeight);
-        video.addEventListener('playing', function(){ console.log('video: playing'); });
+        console.log('video readyState=' + video.readyState + ' ' + video.videoWidth + 'x' + video.videoHeight);
       } else {
-        console.warn('no <video> element found in DOM after 2s - camera source likely never initialised');
+        console.warn('no <video> after 2s — camera likely not initialised');
       }
     }, 2000);
 
     // Force video + WebGL canvas to fill the real viewport. AR.js often
     // resizes them based on a transient/wrong height (address bar, safe areas)
     // which leaves the 3D layer as a thin strip at the bottom of the screen.
+    var lastFsKey = '';
     function forceFullscreen(){
       var w = window.innerWidth;
       var h = window.innerHeight;
@@ -468,7 +505,6 @@
       if(sceneEl){
         sceneEl.style.setProperty('width', w + 'px', 'important');
         sceneEl.style.setProperty('height', h + 'px', 'important');
-        // Ask A-Frame to recompute camera aspect / renderer size
         try{
           if(sceneEl.resize) sceneEl.resize();
           if(sceneEl.renderer && sceneEl.renderer.setSize){
@@ -478,14 +514,14 @@
             sceneEl.camera.aspect = w / h;
             sceneEl.camera.updateProjectionMatrix();
           }
-        }catch(err){
-          console.warn('forceFullscreen A-Frame resize:', err.message);
-        }
+        }catch(err){ /* silent */ }
       }
       window.dispatchEvent(new Event('resize'));
-      console.log('forceFullscreen:', w + 'x' + h,
-        'canvas=', canvas ? (canvas.clientWidth + 'x' + canvas.clientHeight) : 'none',
-        'video=', video ? (video.clientWidth + 'x' + video.clientHeight) : 'none');
+      var key = w + 'x' + h;
+      if(key !== lastFsKey){
+        lastFsKey = key;
+        console.log('viewport ' + key);
+      }
     }
     [300, 800, 1500, 3000].forEach(function(ms){ setTimeout(forceFullscreen, ms); });
     window.addEventListener('resize', function(){ setTimeout(forceFullscreen, 50); });
