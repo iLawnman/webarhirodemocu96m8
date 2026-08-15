@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>local AR Marker — распознавание и куб</title>
+<title>debug AR Marker — распознавание и куб</title>
 
 <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
 <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
@@ -144,6 +144,12 @@
     его в <b>editor.html</b>, выберите файл <b>pattern.patt</b> здесь и покажите камере ту же картинку,
     из которой он был сделан.
   </p>
+  <div class="row" style="justify-content:space-between;">
+    <label style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--text-dim);cursor:pointer;">
+      <input type="checkbox" id="debugToggle"> показать рамки распознавания AR.js
+    </label>
+    <span id="diagStatus" style="font-family:var(--mono);font-size:11px;color:var(--text-dim);"></span>
+  </div>
 </div>
 
 <div class="arjs-loader" id="loader">
@@ -162,14 +168,14 @@
   <a-assets></a-assets>
 
   <a-marker id="markerHiro" type="pattern" url="assets/hiro.patt" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
-    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0">
-      <a-animation attribute="rotation" to="0 405 0" dur="6000" easing="linear" repeat="indefinite"></a-animation>
+    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"
+      animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">
     </a-box>
   </a-marker>
 
   <a-marker id="markerCustom" type="pattern" url="" emitevents="true" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5" style="display:none">
-    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0">
-      <a-animation attribute="rotation" to="0 405 0" dur="6000" easing="linear" repeat="indefinite"></a-animation>
+    <a-box position="0 0.5 0" depth="1" height="1" width="1" material="color:#5ee3a5; metalness:0.15; roughness:0.35" rotation="0 45 0"
+      animation="property: rotation; to: 0 405 45; loop: true; dur: 6000; easing: linear">
     </a-box>
   </a-marker>
 
@@ -195,6 +201,34 @@
 
   var activeMarker = markerHiro;
   var customObjectUrl = null;
+  var diagStatus = document.getElementById('diagStatus');
+  var debugToggle = document.getElementById('debugToggle');
+
+  // Diagnostics: the #1 reason "camera sees the marker but nothing happens"
+  // is that the .patt file never actually loaded (wrong path, file not
+  // uploaded next to index.html, wrong case, etc). AR.js fails silently in
+  // that case - the marker is simply never recognised. Check reachability
+  // ourselves and say so plainly instead of leaving it a mystery.
+  function checkPattern(url, label){
+    if(!url){ diagStatus.textContent = ''; return; }
+    fetch(url, {cache:'no-store'}).then(function(res){
+      if(res.ok){
+        diagStatus.textContent = label + ': файл найден ✓';
+        diagStatus.style.color = 'var(--accent)';
+      } else {
+        diagStatus.textContent = label + ': HTTP ' + res.status + ' — файл не найден по пути "' + url + '"';
+        diagStatus.style.color = 'var(--danger)';
+      }
+    }).catch(function(err){
+      diagStatus.textContent = label + ': не удалось загрузить (' + err.message + '). Открыт ли index.html через http(s), а не напрямую как file://?';
+      diagStatus.style.color = 'var(--danger)';
+    });
+  }
+  checkPattern('assets/hiro.patt', 'assets/hiro.patt');
+
+  debugToggle.addEventListener('change', function(){
+    scene.setAttribute('arjs', 'debugUIEnabled', debugToggle.checked);
+  });
 
   scene.addEventListener('loaded', function(){
     loader.style.display = 'none';
@@ -222,12 +256,18 @@
     }
   }
 
-  function bindMarkerEvents(markerEl){
-    markerEl.addEventListener('markerFound', function(){ setStatus(true); });
-    markerEl.addEventListener('markerLost', function(){ setStatus(false); });
+  function bindMarkerEvents(markerEl, label){
+    markerEl.addEventListener('markerFound', function(){
+      setStatus(true);
+      console.log('[AR] markerFound:', label);
+    });
+    markerEl.addEventListener('markerLost', function(){
+      setStatus(false);
+      console.log('[AR] markerLost:', label);
+    });
   }
-  bindMarkerEvents(markerHiro);
-  bindMarkerEvents(markerCustom);
+  bindMarkerEvents(markerHiro, 'hiro');
+  bindMarkerEvents(markerCustom, 'custom');
 
   function activate(mode){
     if(mode === 'hiro'){
@@ -239,6 +279,7 @@
       btnCustom.classList.remove('active');
       customFileWrap.style.display = 'none';
       activeMarker = markerHiro;
+      checkPattern('assets/hiro.patt', 'assets/hiro.patt');
     } else {
       markerCustom.setAttribute('style','');
       markerCustom.object3D.visible = true;
@@ -248,6 +289,7 @@
       btnHiro.classList.remove('active');
       customFileWrap.style.display = 'block';
       activeMarker = markerCustom;
+      checkPattern(customObjectUrl, 'выбранный .patt');
     }
     setStatus(false);
   }
