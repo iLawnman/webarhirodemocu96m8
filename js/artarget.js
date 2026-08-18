@@ -38,29 +38,11 @@ export function buildInteractiveBodyHtml(targetInfo = {}) {
     }
 }
 
-/**
- * ModelFactory — central builder for AR target objects.
- * HTML templates remain the single source of truth for panel content, size and placement.
- * Procedural (canvas) fallback is available for offline / no-foreignObject environments.
- */
 export class ModelFactory {
-    /**
-     * @param {object} [defaults]
-     * @param {string} [defaults.templateUrl]
-     */
     constructor(defaults = {}) {
         this.templateUrl = defaults.templateUrl || DEFAULT_TEMPLATE_URL;
     }
 
-    /**
-     * Abstract AR object: panels + layout come from declarative HTML.
-     * @param {string|object} [targetData=''] Target identifier or data object
-     * @param {object} [options]
-     * @param {Function|null} [options.onOk]
-     * @param {string} [options.templateUrl]
-     * @param {object} [options.vars] Additional variables for template substitution
-     * @returns {Promise<THREE.Group>}
-     */
     async createArTarget(targetData = '', options = {}) {
         const { onOk = null, templateUrl = this.templateUrl, vars: extraVars = {} } = options;
 
@@ -77,59 +59,58 @@ export class ModelFactory {
         const sphere = this._createSphere();
         group.add(sphere);
 
-        const template = await this._loadTemplate(templateUrl);
-        const panels = template.querySelectorAll('panel');
+        try {
+            const template = await this._loadTemplate(templateUrl);
+            const panels = template.querySelectorAll('panel');
 
-        const interactiveBodyHtml = buildInteractiveBodyHtml(targetInfo);
-        
-        let imageSrc = targetInfo.imageSrc || targetInfo.image || '';
-        if (imageSrc && !imageSrc.startsWith('data:')) {
-            imageSrc = await this._imageToDataUrl(imageSrc);
-        }
-
-        const templateVars = {
-            title: title,
-            question: targetInfo.question || targetInfo.mainText || '',
-            imageSrc: imageSrc,
-            imgDisplay: imageSrc ? 'flex' : 'none',
-            interactiveBody: interactiveBodyHtml,
-            okText: targetInfo.okText ?? 'OK',
-            textLabel: targetInfo.textLabel ?? 'MARKER',
-            subtitle: targetInfo.subtitle ?? 'AR Target',
-            markerName: title,
-            ...extraVars
-        };
-
-        const userData = {
-            targetInfo,
-            markerName: title,
-            sphere,
-            onOk,
-            panels: {}
-        };
-
-        for (const panelEl of panels) {
-            const mesh = await this._createPanelFromHtml(panelEl, templateVars);
-            group.add(mesh);
-            userData.panels[mesh.name] = mesh;
-            userData[mesh.name] = mesh;
-            if (mesh.userData.texture) {
-                userData[`${mesh.name}Texture`] = mesh.userData.texture;
+            const interactiveBodyHtml = buildInteractiveBodyHtml(targetInfo);
+            
+            let imageSrc = targetInfo.imageSrc || targetInfo.image || '';
+            if (imageSrc && !imageSrc.startsWith('data:')) {
+                imageSrc = await this._imageToDataUrl(imageSrc);
             }
+
+            const templateVars = {
+                title: title,
+                question: targetInfo.question || targetInfo.mainText || '',
+                imageSrc: imageSrc,
+                imgDisplay: imageSrc ? 'flex' : 'none',
+                interactiveBody: interactiveBodyHtml,
+                okText: targetInfo.okText ?? 'OK',
+                textLabel: targetInfo.textLabel ?? 'MARKER',
+                subtitle: targetInfo.subtitle ?? 'AR Target',
+                markerName: title,
+                ...extraVars
+            };
+
+            const userData = {
+                targetInfo,
+                markerName: title,
+                sphere,
+                onOk,
+                panels: {}
+            };
+
+            for (const panelEl of panels) {
+                const mesh = await this._createPanelFromHtml(panelEl, templateVars);
+                group.add(mesh);
+                userData.panels[mesh.name] = mesh;
+                userData[mesh.name] = mesh;
+                if (mesh.userData.texture) {
+                    userData[`${mesh.name}Texture`] = mesh.userData.texture;
+                }
+            }
+
+            group.position.z = 0.02;
+            group.userData = userData;
+
+            return group;
+        } catch (err) {
+            console.warn('[ModelFactory] Fallback to sync canvas generation due to:', err);
+            return this.createArTargetSync(targetData, options);
         }
-
-        group.position.z = 0.02;
-        group.userData = userData;
-
-        return group;
     }
 
-    /**
-     * Pure-canvas fallback (no network / no foreignObject) — for offline use.
-     * @param {string|object} [targetData=''] Target identifier or data object
-     * @param {object} [options]
-     * @returns {THREE.Group}
-     */
     createArTargetSync(targetData = '', options = {}) {
         const { onOk = null } = options;
 
@@ -155,9 +136,9 @@ export class ModelFactory {
             rot: [-Math.PI / 2, 0, 0],
             canvasW: 380, canvasH: 450,
             draw: (ctx, cw, ch) => {
-                ctx.fillStyle = 'rgba(10, 10, 20, 0.92)';
+                ctx.fillStyle = 'rgba(10, 10, 20, 0.95)';
                 ctx.fillRect(0, 0, cw, ch);
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
                 ctx.lineWidth = 4;
                 ctx.strokeRect(2, 2, cw - 4, ch - 4);
 
@@ -227,7 +208,7 @@ export class ModelFactory {
         return group;
     }
 
-    // ─── private: Helpers ───────────────────────────────────────────────────
+    // ─── Private Helpers ───────────────────────────────────────────────────
 
     _imageToDataUrl(url) {
         return new Promise((resolve) => {
@@ -235,8 +216,8 @@ export class ModelFactory {
             img.crossOrigin = 'Anonymous';
             img.onload = () => {
                 const canvas = document.createElement('canvas');
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
+                canvas.width = img.naturalWidth || 100;
+                canvas.height = img.naturalHeight || 100;
                 const ctx = canvas.getContext('2d');
                 ctx.drawImage(img, 0, 0);
                 resolve(canvas.toDataURL('image/png'));
@@ -299,12 +280,12 @@ export class ModelFactory {
 
     _measurePanelCss(panelEl) {
         const name = panelEl.getAttribute('name') || '';
-        const root = panelEl.querySelector('.panel') || panelEl.firstElementChild;
 
         if (name === 'okButton') {
             return { cssW: 256, cssH: 96 };
         }
 
+        const root = panelEl.querySelector('.panel') || panelEl.firstElementChild;
         if (!root) return { cssW: 380, cssH: 450 };
 
         const style = root.getAttribute('style') || '';
@@ -332,23 +313,29 @@ export class ModelFactory {
             const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const img = new Image();
-            img.onload = () => {
-                const canvas = document.createElement('canvas');
-                canvas.width = width;
-                canvas.height = height;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(img, 0, 0);
-                URL.revokeObjectURL(url);
 
-                const tex = new THREE.CanvasTexture(canvas);
-                tex.colorSpace = THREE.SRGBColorSpace;
-                tex.needsUpdate = true;
-                resolve(tex);
+            img.onload = () => {
+                // Избегаем гонки условий при рендере в canvas
+                setTimeout(() => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url);
+
+                    const tex = new THREE.CanvasTexture(canvas);
+                    tex.colorSpace = THREE.SRGBColorSpace;
+                    tex.needsUpdate = true;
+                    resolve(tex);
+                }, 20);
             };
+
             img.onerror = (e) => {
                 URL.revokeObjectURL(url);
                 reject(e);
             };
+
             img.src = url;
         });
     }
@@ -408,24 +395,12 @@ export class ModelFactory {
     }
 }
 
-// ─── backward-compatible free functions (no regression) ───────────────────────
-
 const defaultFactory = new ModelFactory();
 
-/**
- * @param {string|object} [targetData]
- * @param {object} [options]
- * @returns {Promise<THREE.Group>}
- */
 export async function createArTarget(targetData, options = {}) {
     return defaultFactory.createArTarget(targetData, options);
 }
 
-/**
- * @param {string|object} [targetData]
- * @param {object} [options]
- * @returns {THREE.Group}
- */
 export function createArTargetSync(targetData, options = {}) {
     return defaultFactory.createArTargetSync(targetData, options);
 }
