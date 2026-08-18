@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CSS2DRenderer, CSS2DObject } from 'CSS2DRenderer.js';
+import { CSS2DRenderer, CSS2DObject } from './CSS3DRenderer';
 
 let cssRendererInstance = null;
 
