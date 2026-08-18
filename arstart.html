@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>quest WebXR ARScene (WebGL)</title>
+  <title>start screen WebXR ARScene (WebGL)</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { overflow: hidden; background: #000; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
@@ -50,6 +50,9 @@
     }
     #ctrl button:disabled { opacity: .45; cursor: not-allowed; }
     #ctrl button.secondary { background: rgba(255,255,255,0.15); color: #fff; }
+    #btn-ar {
+      display: none; /* показывается через UI.enableArButton() */
+    }
     #hint {
       position: fixed; top: 50px; left: 0; width: 100%; text-align: center;
       color: #fff; font-size: 13px; pointer-events: none; z-index: 40;
@@ -62,10 +65,7 @@
       display: none;
     }
 
-    /* ───────────────────── Curtain (загрузочная штора) ─────────────────────
-       Активна с самого старта, закрывает 3D-канвас картинкой сканирования,
-       пока инициализируется WebXR-сессия. Уезжает вверх, когда пол установлен
-       (сессия успешно подключена к рендереру). */
+    /* ───────────────────── Curtain (загрузочная штора) ───────────────────── */
     #curtain-panel {
       position: fixed; inset: 0; z-index: 30;
       background: radial-gradient(circle at 50% 40%, #101625, #000 75%);
@@ -76,27 +76,30 @@
       transform: translateY(-100%); opacity: 0; pointer-events: none;
     }
     .curtain-inner { text-align: center; color: #fff; }
-    .phone-scan { width: 90px; height: 90px; margin: 0 auto 22px; position: relative; }
+    .phone-scan { width: 160px; height: 160px; margin: 0 auto 28px; position: relative; }
     .phone-icon {
-      font-size: 52px; display: inline-block;
+      font-size: 96px; display: inline-block;
       animation: phoneScan 2.6s ease-in-out infinite;
-      filter: drop-shadow(0 0 12px rgba(0,255,170,.5));
+      filter: drop-shadow(0 0 20px rgba(0,255,170,.55));
     }
     @keyframes phoneScan {
       0%   { transform: translate(0,0) rotate(0deg); }
-      25%  { transform: translate(-16px,-12px) rotate(-10deg); }
-      50%  { transform: translate(0,-20px) rotate(0deg); }
-      75%  { transform: translate(16px,-12px) rotate(10deg); }
+      25%  { transform: translate(-22px,-18px) rotate(-10deg); }
+      50%  { transform: translate(0,-28px) rotate(0deg); }
+      75%  { transform: translate(22px,-18px) rotate(10deg); }
       100% { transform: translate(0,0) rotate(0deg); }
     }
     .curtain-text {
       font-size: 14px; letter-spacing: .5px; opacity: .85;
       text-transform: uppercase;
+      transition: opacity .35s ease;
+    }
+    .curtain-text.ready {
+      opacity: 0;
+      pointer-events: none;
     }
 
-    /* ───────────────────── Quest-start panel ("ИЩИТЕ!") ─────────────────────
-       Выезжает сверху, когда пол установлен и штора уехала. Прячется, как
-       только распознан маркер. */
+    /* ───────────────────── Quest-start panel ("ИЩИТЕ!") ───────────────────── */
     #quest-start-panel {
       position: fixed; top: 0; left: 50%; z-index: 90;
       width: min(320px, 86vw);
@@ -183,7 +186,7 @@
 <button id="log-toggle">LOG</button>
 <div id="log-panel"></div>
 <img id="target-preview" alt="target">
-<div id="hint">Инициализация…</div>
+<div id="hint"></div>
 <div id="ctrl">
   <button id="btn-ar" disabled>Start AR</button>
 </div>

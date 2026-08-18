@@ -195,13 +195,12 @@ export class ImageRecognition {
       ctx.fillRect(0, 0, 128, 128);
       ctx.fillStyle = '#ff0055';
       ctx.fillRect(32, 32, 64, 64);
-      this.ui.setPreview(c.toDataURL());
+      // this.ui.setPreview(c.toDataURL());
     } else {
-      this.ui.setPreview(this.targetBitmaps[0].src);
+      // this.ui.setPreview(this.targetBitmaps[0].src);
     }
 
     const names = this.targetBitmaps.map(t => t.name).join(', ');
-    this.ui.setHint('Нажмите «Start AR». Камера на 1.6 м. Покажите: ' + names);
     this.ui.enableArButton();
     this.ui.log('state → waitingImage | markers: ' + names, 'info');
   }
@@ -275,8 +274,8 @@ export class ImageRecognition {
     const pick = this.targetBitmaps[Math.floor(Math.random() * this.targetBitmaps.length)];
     this.ui.showQuestStart(pick.src, 'ИЩИТЕ!');
 
-    const names = this.targetBitmaps.map(t => t.name).join(', ');
-    this.ui.setHint(hintText || ('Покажите одну из картинок: ' + names));
+    // const names = this.targetBitmaps.map(t => t.name).join(', ');
+    // this.ui.setHint(hintText || ('Покажите одну из картинок: ' + names));
   }
 
   /**
@@ -409,8 +408,8 @@ export class ImageRecognition {
 
     this.state = 'showingResult';
     this.ui.log(
-      `[Quest ${questId || '?'}] answer=${JSON.stringify(value)} → ${isCorrect ? 'CORRECT' : 'WRONG'}`,
-      isCorrect ? 'ok' : 'warn'
+        `[Quest ${questId || '?'}] answer=${JSON.stringify(value)} → ${isCorrect ? 'CORRECT' : 'WRONG'}`,
+        isCorrect ? 'ok' : 'warn'
     );
 
     const reactionText = this.questManager.getReactionText(questId, isCorrect);

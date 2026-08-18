@@ -9,6 +9,7 @@ export class UI {
 
     // ── новые панели overlay-флоу ──
     this.curtain = document.getElementById('curtain-panel');
+    this.curtainText = document.querySelector('.curtain-text');
 
     this.questStartPanel = document.getElementById('quest-start-panel');
     this.questStartImg = document.getElementById('quest-start-img');
@@ -68,6 +69,8 @@ export class UI {
   enableArButton() {
     this.btnAr.disabled = false;
     this.btnAr.style.display = 'block';
+    // Инициализация завершена — текст «Инициализация AR…» скрывается
+    if (this.curtainText) this.curtainText.classList.add('ready');
   }
 
   disableArButton() {
@@ -97,6 +100,8 @@ export class UI {
   showCurtain() {
     if (!this.curtain) return;
     this.curtain.classList.remove('hidden');
+    // Вернуть текст «Инициализация AR…» при повторном показе шторы
+    if (this.curtainText) this.curtainText.classList.remove('ready');
   }
 
   /** Прячет штору (уезжает вверх) — вызывается, когда пол установлен (сессия готова). */
