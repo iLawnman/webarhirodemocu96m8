@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>start screens неСказка — Квест</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Georgia', 'Times New Roman', serif;
+            background: #0a0a12;
+            color: #fff;
+            min-height: 100vh;
+            overflow: hidden;
+            touch-action: pan-y;
+        }
+
+        #slider {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .slide {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 48px 24px 100px;
+            opacity: 0;
+            transform: translateX(40px);
+            transition: opacity 0.4s ease, transform 0.4s ease;
+            pointer-events: none;
+            background:
+                    radial-gradient(ellipse at 30% 20%, rgba(218,165,32,0.12) 0%, transparent 50%),
+                    radial-gradient(ellipse at 70% 80%, rgba(128,0,0,0.15) 0%, transparent 45%),
+                    linear-gradient(160deg, #0f0a08 0%, #1a1020 40%, #0c1520 100%);
+        }
+        .slide.active {
+            opacity: 1;
+            transform: translateX(0);
+            pointer-events: auto;
+            z-index: 2;
+        }
+        .slide.exit-left {
+            opacity: 0;
+            transform: translateX(-40px);
+        }
+
+        .logo-mark {
+            width: 56px; height: 56px;
+            border-radius: 14px;
+            background: linear-gradient(135deg, #DAA520, #B8860B);
+            display: flex; align-items: center; justify-content: center;
+            font-family: system-ui, sans-serif;
+            font-weight: 800; font-size: 1.1rem; color: #1a1008;
+            margin-bottom: 28px;
+            box-shadow: 0 8px 24px rgba(218,165,32,0.35);
+        }
+
+        .slide-title {
+            font-size: clamp(1.6rem, 6vw, 2.4rem);
+            font-weight: 700;
+            text-align: center;
+            line-height: 1.2;
+            margin-bottom: 8px;
+            letter-spacing: 0.02em;
+        }
+        .slide-subtitle {
+            font-family: system-ui, sans-serif;
+            font-size: clamp(1.1rem, 4vw, 1.5rem);
+            font-weight: 700;
+            text-align: center;
+            margin-bottom: 20px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }
+        .slide-text {
+            font-family: system-ui, -apple-system, sans-serif;
+            font-size: 0.95rem;
+            line-height: 1.55;
+            text-align: center;
+            max-width: 340px;
+            opacity: 0.92;
+            white-space: pre-wrap;
+        }
+
+        .decor-line {
+            width: 64px; height: 2px;
+            background: linear-gradient(90deg, transparent, #DAA520, transparent);
+            margin: 20px auto;
+        }
+
+        /* dots + nav */
+        .nav {
+            position: fixed;
+            left: 0; right: 0; bottom: 0;
+            z-index: 10;
+            padding: 16px 20px 28px;
+            background: linear-gradient(180deg, transparent, rgba(0,0,0,0.7) 40%);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 14px;
+        }
+        .dots {
+            display: flex; gap: 8px; align-items: center;
+        }
+        .dot {
+            width: 8px; height: 8px; border-radius: 50%;
+            background: rgba(255,255,255,0.25);
+            border: none; cursor: pointer; padding: 0;
+            transition: all 0.2s;
+        }
+        .dot.active {
+            width: 22px; border-radius: 4px;
+            background: #DAA520;
+        }
+
+        .nav-row {
+            display: flex; gap: 10px; width: 100%; max-width: 360px;
+        }
+        .btn {
+            flex: 1;
+            padding: 14px 16px;
+            border: none; border-radius: 12px;
+            font-family: system-ui, sans-serif;
+            font-size: 0.95rem; font-weight: 600;
+            cursor: pointer; transition: all 0.2s;
+        }
+        .btn-ghost {
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: #ccc;
+        }
+        .btn-ghost:hover { background: rgba(255,255,255,0.12); }
+        .btn-primary {
+            background: linear-gradient(90deg, #DAA520, #B8860B);
+            color: #1a1008;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(218,165,32,0.4);
+        }
+        .btn:disabled { opacity: 0.35; cursor: not-allowed; transform: none !important; }
+
+        .skip {
+            position: fixed; top: 14px; right: 14px; z-index: 11;
+            background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15);
+            color: #aaa; font-size: 0.75rem; padding: 6px 12px;
+            border-radius: 20px; cursor: pointer; font-family: system-ui, sans-serif;
+        }
+        .skip:hover { color: #fff; }
+
+        /* swipe hint */
+        .swipe-hint {
+            font-family: system-ui, sans-serif;
+            font-size: 0.7rem; opacity: 0.4; margin-top: -4px;
+        }
+    </style>
+</head>
+<body>
+
+<button class="skip" id="skip-btn">Пропустить</button>
+
+<div id="slider"></div>
+
+<div class="nav">
+    <div class="dots" id="dots"></div>
+    <p class="swipe-hint">свайп или кнопки</p>
+    <div class="nav-row">
+        <button class="btn btn-ghost" id="prev-btn" disabled>← Назад</button>
+        <button class="btn btn-primary" id="next-btn">Далее →</button>
+    </div>
+</div>
+
+<script src="./assets/screens_data.js"></script>
+<script>
+    (function () {
+        function stripTags(s) {
+            if (!s) return '';
+            return s
+                .replace(/<\/?[^>]+(>|$)/g, '')
+                .replace(/\\n/g, '\n')
+                .trim();
+        }
+
+        const screens = (typeof START_SCREENS !== 'undefined' ? START_SCREENS : []).map(s => ({
+            id: s.id,
+            title: stripTags(s.title),
+            titleColor: s.titleColor || '#DAA520',
+            subtitle: stripTags(s.subtitle),
+            subtitleColor: s.subtitleColor || '#FF4500',
+            text: stripTags(s.text),
+            textColor: s.textColor || '#FFFFFF'
+        }));
+
+        if (!screens.length) {
+            document.getElementById('slider').innerHTML =
+                '<div class="slide active"><p style="text-align:center">Нет данных screens_data.js</p></div>';
+            return;
+        }
+
+        let index = 0;
+        const slider = document.getElementById('slider');
+        const dotsEl = document.getElementById('dots');
+        const prevBtn = document.getElementById('prev-btn');
+        const nextBtn = document.getElementById('next-btn');
+
+        // build slides
+        screens.forEach((s, i) => {
+            const el = document.createElement('div');
+            el.className = 'slide' + (i === 0 ? ' active' : '');
+            el.dataset.index = i;
+            el.innerHTML =
+                '<div class="logo-mark">R4</div>' +
+                (s.title ? '<div class="slide-title" style="color:' + s.titleColor + '">' + escapeHtml(s.title) + '</div>' : '') +
+                (s.subtitle ? '<div class="slide-subtitle" style="color:' + s.subtitleColor + '">' + escapeHtml(s.subtitle) + '</div>' : '') +
+                '<div class="decor-line"></div>' +
+                (s.text ? '<div class="slide-text" style="color:' + s.textColor + '">' + escapeHtml(s.text) + '</div>' : '');
+            slider.appendChild(el);
+
+            const dot = document.createElement('button');
+            dot.className = 'dot' + (i === 0 ? ' active' : '');
+            dot.type = 'button';
+            dot.setAttribute('aria-label', 'Экран ' + (i + 1));
+            dot.addEventListener('click', () => goTo(i));
+            dotsEl.appendChild(dot);
+        });
+
+        function escapeHtml(t) {
+            return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+        }
+
+        function goTo(i) {
+            if (i < 0 || i >= screens.length || i === index) return;
+            const slides = slider.querySelectorAll('.slide');
+            const dots = dotsEl.querySelectorAll('.dot');
+            slides[index].classList.remove('active');
+            slides[index].classList.add('exit-left');
+            setTimeout(() => slides[index] && slides[index].classList.remove('exit-left'), 400);
+            index = i;
+            slides[index].classList.add('active');
+            dots.forEach((d, di) => d.classList.toggle('active', di === index));
+            prevBtn.disabled = index === 0;
+            nextBtn.textContent = index === screens.length - 1 ? 'Начать квест →' : 'Далее →';
+        }
+
+        function startQuest() {
+            location.href = 'arstart.html';
+        }
+
+        function next() {
+            if (index >= screens.length - 1) {
+                startQuest();
+                return;
+            }
+            goTo(index + 1);
+        }
+
+        function prev() {
+            goTo(index - 1);
+        }
+
+        prevBtn.addEventListener('click', prev);
+        nextBtn.addEventListener('click', next);
+        document.getElementById('skip-btn').addEventListener('click', startQuest);
+
+        // swipe
+        let touchX = null;
+        slider.addEventListener('touchstart', e => {
+            touchX = e.changedTouches[0].screenX;
+        }, { passive: true });
+        slider.addEventListener('touchend', e => {
+            if (touchX == null) return;
+            const dx = e.changedTouches[0].screenX - touchX;
+            touchX = null;
+            if (Math.abs(dx) < 40) return;
+            if (dx < 0) next();
+            else prev();
+        }, { passive: true });
+
+        // keyboard
+        document.addEventListener('keydown', e => {
+            if (e.key === 'ArrowRight' || e.key === 'Enter') next();
+            if (e.key === 'ArrowLeft') prev();
+        });
+    })();
+</script>
+</body>
+</html>

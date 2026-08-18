@@ -1,0 +1,1484 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Редактор — Квест Платформа</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b1120;
+      --bg-light: #111827;
+      --card: #111827;
+      --border: rgba(148, 163, 184, .16);
+      --border-hover: rgba(129, 140, 248, .45);
+
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --dim: #475569;
+
+      --indigo: #6366f1;
+      --cyan: #06b6d4;
+      --gold: #daa520;
+      --danger: #e11d48;
+      --success: #10b981;
+    }
+
+    body {
+      font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      height: 100vh;
+      background:
+              radial-gradient(circle at 50% -20%, rgba(99, 102, 241, .12), transparent 45%),
+              var(--bg);
+      color: var(--text);
+      overflow: hidden;
+    }
+
+    #sidebar {
+      width: 300px;
+      background: rgba(17, 24, 39, .92);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      z-index: 10;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .section {
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section.hierarchy {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      border-bottom: none;
+      padding-bottom: 0;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .section h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #818cf8;
+      font-weight: 700;
+      margin-bottom: 12px;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: rgba(99, 102, 241, .12);
+      color: #e2e8f0;
+      border: 1px solid rgba(99, 102, 241, .25);
+      padding: 7px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: inherit;
+      margin-right: 6px;
+      margin-bottom: 6px;
+      transition: background .2s ease, border-color .2s ease, color .2s ease;
+    }
+
+    button:hover {
+      color: #fff;
+      background: linear-gradient(135deg, rgba(99, 102, 241, .85), rgba(6, 182, 212, .75));
+      border-color: transparent;
+    }
+
+    button.btn-danger {
+      background: rgba(225, 29, 72, .12);
+      border-color: rgba(225, 29, 72, .3);
+      color: #fda4af;
+    }
+
+    button.btn-danger:hover {
+      background: linear-gradient(135deg, #e11d48, #be123c);
+      border-color: transparent;
+      color: #fff;
+    }
+
+    button.btn-success {
+      background: rgba(218, 165, 32, .15);
+      border-color: rgba(218, 165, 32, .3);
+      color: #fef08a;
+    }
+
+    button.btn-success:hover {
+      color: #1a1008;
+      background: linear-gradient(135deg, #daa520, #b8860b);
+      border-color: transparent;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    select,
+    textarea {
+      width: 100%;
+      background: rgba(15, 23, 42, .8);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 7px 10px;
+      font-size: 12px;
+      font-family: inherit;
+      margin-bottom: 8px;
+      border-radius: 8px;
+      transition: border-color .2s ease;
+    }
+
+    input[type="text"]:focus,
+    input[type="number"]:focus,
+    select:focus,
+    textarea:focus {
+      outline: none;
+      border-color: rgba(99, 102, 241, .5);
+    }
+
+    label {
+      font-size: 11px;
+      color: var(--muted);
+      display: block;
+      margin-bottom: 4px;
+      font-weight: 500;
+    }
+
+    #tree {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: 8px;
+      background: rgba(11, 17, 32, .5);
+    }
+
+    .tree-item {
+      padding: 8px 10px;
+      font-size: 12px;
+      cursor: pointer;
+      border-radius: 8px;
+      margin-bottom: 3px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border: 1px solid transparent;
+      transition: background .15s ease, border-color .15s ease;
+    }
+
+    .tree-item:hover {
+      background: rgba(99, 102, 241, .08);
+      border-color: var(--border);
+    }
+
+    .tree-item.active {
+      background: rgba(99, 102, 241, .18);
+      border-color: rgba(99, 102, 241, .35);
+      color: #fff;
+    }
+
+    .tree-item span:last-child {
+      color: var(--dim);
+      font-size: 10px;
+      letter-spacing: .5px;
+      text-transform: uppercase;
+    }
+
+    #viewport {
+      flex: 1;
+      position: relative;
+      background: var(--bg);
+    }
+
+    #canvas3d {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    #inspector {
+      width: 300px;
+      background: rgba(17, 24, 39, .92);
+      border-left: 1px solid var(--border);
+      padding: 16px 18px;
+      overflow-y: auto;
+      z-index: 10;
+    }
+
+    #inspector > h3 {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      color: #818cf8;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    .prop-group {
+      margin-bottom: 14px;
+    }
+
+    .prop-group h3 {
+      font-size: 12px;
+      color: var(--text);
+      margin-bottom: 8px;
+      font-weight: 650;
+    }
+
+    .row {
+      display: flex;
+      gap: 6px;
+    }
+
+    .row > div {
+      flex: 1;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 14px 0;
+    }
+
+    #render-canvas {
+      display: none;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, .2);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(148, 163, 184, .35);
+    }
+  </style>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="section">
+    <h3>Локальные префабы</h3>
+    <button onclick="loadLocalPrefab()">Загрузить дефолтный шаблон</button>
+    <button onclick="document.getElementById('file-input').click()">Открыть HTML...</button>
+    <button class="btn-success" onclick="document.getElementById('json-input').click()">Загрузить JSON дизайн</button>
+    <button onclick="exportHTML()">Сохранить HTML</button>
+
+    <input type="file" id="file-input" style="display:none" accept=".html,.template" onchange="handleFileSelect(event)">
+    <input type="file" id="json-input" style="display:none" accept=".json" onchange="handleJsonDesignSelect(event)">
+    <select id="json-row-selector" style="display:none; margin-top:6px;" onchange="handleJsonRowChange(event)"></select>
+  </div>
+
+  <div class="section">
+    <h3>Добавить 3D Элемент</h3>
+    <button onclick="addObject3D()">+ 3D Объект (OBJ)</button>
+    <button onclick="addPanel()">+ UI Панель</button>
+    <button onclick="addVideoObject3D()">+ Video</button>
+    <button onclick="addHtmlObject3D()">+ Other HTML</button>
+  </div>
+
+  <div class="section hierarchy">
+    <h3>Иерархия сцены</h3>
+    <div id="tree"></div>
+  </div>
+</div>
+
+<div id="viewport">
+  <canvas id="canvas3d"></canvas>
+</div>
+
+<div id="inspector">
+  <h3>Свойства объекта</h3>
+  <div id="inspector-content">
+    <p style="font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.5;">Выберите элемент в сцене для редактирования.</p>
+  </div>
+</div>
+
+<canvas id="render-canvas" width="512" height="512"></canvas>
+
+<script>
+  let scene, camera, renderer, orbitControls, transformControls;
+  let selectedObject = null;
+  const editableObjects = [];
+
+  const localDefaultTemplate = `<template id="ar-target">
+  <model name="Object_Main" data-src="./assets/target.obj" data-position="0,0.05,0" data-rotation="0,0,0"></model>
+  <panel name="UI_TextPanel" data-width="0.2" data-height="0.2" data-position="-0.15,0.1,0" data-rotation="0,0,0">
+    <div class="panel text-panel">
+      <div class="border"></div>
+      <div class="label">Header</div>
+      <div class="name">Title</div>
+      <div class="sub">Subtitle</div>
+    </div>
+  </panel>
+</template>`;
+
+  function normalizePath(path) {
+    if (!path) return '';
+    let p = path.trim();
+    if (p.startsWith('http://') || p.startsWith('https://')) return p;
+    if (p.startsWith('./')) return p;
+    if (p.startsWith('/')) return '.' + p;
+    return './assets/' + p;
+  }
+
+  // ---- JSON-дизайн: групповые панели (BackImage, BackGradient, TitleText_bg, ...) ----
+
+  const DESIGN_PROP_KEYS = ['font', 'color', 'image', 'fx', 'sound', 'text', 'prefab'];
+
+  function escapeAttr(str) {
+    return String(str == null ? '' : str)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+  }
+
+  // Строит текстуру-описание панели на основе её свойств (Font/Color/Image/FX/Sound/Text/Prefab)
+  function buildPropPanelVisual(props) {
+    const panelData = { bgColor: '#181830', borderColor: '#4a5568', elements: [], props };
+
+    if (props.color) {
+      const c = String(props.color).replace('#', '');
+      panelData.bgColor = /^[0-9a-fA-F]{6,8}$/.test(c) ? '#' + c.slice(0, 6) : panelData.bgColor;
+    }
+
+    let y = 26;
+    panelData.elements.push({ type: 'text', text: props.group || '', y, fontSize: 17, fontWeight: 'bold', color: '#ffd700' });
+    y += 26;
+
+    if (props.image) {
+      panelData.elements.push({ type: 'text', text: '[IMG] ' + String(props.image).split('/').pop(), y, fontSize: 13, color: '#7dd3fc' });
+      y += 20;
+    }
+    if (props.text) {
+      panelData.elements.push({ type: 'text', text: props.text, y, fontSize: 15, color: '#ffffff' });
+      y += 20;
+    }
+    if (props.font) {
+      panelData.elements.push({ type: 'text', text: 'Font: ' + props.font, y, fontSize: 12, color: '#94a3b8' });
+      y += 16;
+    }
+    if (props.fx) {
+      panelData.elements.push({ type: 'text', text: 'FX: ' + props.fx, y, fontSize: 12, color: '#94a3b8' });
+      y += 16;
+    }
+    if (props.sound) {
+      panelData.elements.push({ type: 'text', text: 'Sound: ' + props.sound, y, fontSize: 12, color: '#94a3b8' });
+      y += 16;
+    }
+    if (props.prefab) {
+      panelData.elements.push({ type: 'text', text: 'Prefab: ' + props.prefab, y, fontSize: 12, color: '#94a3b8' });
+      y += 16;
+    }
+
+    return panelData;
+  }
+
+  // Сериализует свойства группы обратно в HTML-разметку панели (для экспорта / hierarhии)
+  function serializePropPanelDiv(props) {
+    let attrs = `class="panel prop-panel" data-group="${escapeAttr(props.group || '')}"`;
+    DESIGN_PROP_KEYS.forEach(k => {
+      if (props[k]) attrs += ` data-${k}="${escapeAttr(props[k])}"`;
+    });
+    return `<div ${attrs}></div>`;
+  }
+
+  function init3D() {
+    const container = document.getElementById('viewport');
+
+    scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x0b1120);
+
+    camera = new THREE.PerspectiveCamera(60, container.clientWidth / container.clientHeight, 0.01, 100);
+    camera.position.set(0, 0.3, 0.5);
+
+    renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas3d'), antialias: true });
+    renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    scene.add(ambientLight);
+
+    const dirLight = new THREE.DirectionalLight(0xffffff, 0.6);
+    dirLight.position.set(5, 10, 7);
+    scene.add(dirLight);
+
+    const grid = new THREE.GridHelper(1, 20, 0x1e293b, 0x111827);
+    scene.add(grid);
+
+    orbitControls = new THREE.OrbitControls(camera, renderer.domElement);
+
+    transformControls = new THREE.TransformControls(camera, renderer.domElement);
+    transformControls.size = 0.75;
+    transformControls.addEventListener('dragging-changed', (event) => {
+      orbitControls.enabled = !event.value;
+    });
+    transformControls.addEventListener('change', updateInspectorFromTransform);
+    scene.add(transformControls);
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+
+    renderer.domElement.addEventListener('pointerdown', (e) => {
+      if (transformControls.dragging) return;
+
+      const rect = renderer.domElement.getBoundingClientRect();
+      mouse.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+
+      raycaster.setFromCamera(mouse, camera);
+      const intersects = raycaster.intersectObjects(editableObjects, true);
+
+      if (intersects.length > 0) {
+        const root = resolveEditableRoot(intersects[0].object);
+        if (root) selectObject(root);
+      }
+    });
+
+    window.addEventListener('resize', onWindowResize);
+
+    loadLocalPrefab();
+    animate();
+  }
+
+  function resolveEditableRoot(obj) {
+    let cur = obj;
+    while (cur) {
+      if (editableObjects.includes(cur)) return cur;
+      cur = cur.parent;
+    }
+    return null;
+  }
+
+  function animate() {
+    requestAnimationFrame(animate);
+    orbitControls.update();
+    renderer.render(scene, camera);
+  }
+
+  function onWindowResize() {
+    const container = document.getElementById('viewport');
+    camera.aspect = container.clientWidth / container.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(container.clientWidth, container.clientHeight);
+  }
+
+  function handleJsonDesignSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target.result);
+        buildDesignFromJson(data);
+      } catch (err) {
+        alert('Ошибка при чтении JSON: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  // Хранит все строки (варианты префаба) последнего загруженного JSON-дизайна
+  let lastJsonDesign = null;
+
+  function handleJsonRowChange(event) {
+    const rowIndex = parseInt(event.target.value, 10);
+    if (lastJsonDesign) buildDesignFromJson(lastJsonDesign, rowIndex);
+  }
+
+  function buildDesignFromJson(jsonData, rowIndex) {
+    if (!Array.isArray(jsonData) || jsonData.length < 2) {
+      alert('Неверный формат JSON-дизайна.');
+      return;
+    }
+
+    lastJsonDesign = jsonData;
+
+    const headers = jsonData[0];
+    const dataRows = jsonData.slice(1);
+    const idx = Number.isInteger(rowIndex) ? rowIndex : 0;
+    const values = dataRows[idx] || dataRows[0];
+
+    // Селектор варианта префаба, если строк несколько (id/name у каждой строки свои)
+    const selectorEl = document.getElementById('json-row-selector');
+    if (selectorEl) {
+      if (dataRows.length > 1) {
+        selectorEl.style.display = '';
+        selectorEl.innerHTML = dataRows.map((row, i) => {
+          const label = row[0] || row[1] || ('Вариант ' + (i + 1));
+          return `<option value="${i}" ${i === idx ? 'selected' : ''}>${label}</option>`;
+        }).join('');
+      } else {
+        selectorEl.style.display = 'none';
+      }
+    }
+
+    // 1. Ключ вида "Имя_ЕщёИмя_Свойство" -> отрезаем текст за последним "_":
+    //    "имя группы" (панель) + "свойство" (Font/Color/Image/FX/Sound/Text/Prefab)
+    const panelsMap = {};
+    const order = [];
+
+    headers.forEach((header, index) => {
+      const val = values[index];
+      if (val === undefined || val === null || val === '') return;
+      if (header === 'id' || header === 'name' || header === 'Res_Check') return;
+
+      const separatorIndex = header.lastIndexOf('_');
+      if (separatorIndex === -1) return;
+
+      const panelName = header.substring(0, separatorIndex);
+      const propType = header.substring(separatorIndex + 1).toLowerCase();
+      if (!DESIGN_PROP_KEYS.includes(propType)) return;
+
+      if (!panelsMap[panelName]) {
+        panelsMap[panelName] = { group: panelName };
+        order.push(panelName);
+      }
+
+      let processedVal = val;
+      if (['image', 'prefab'].includes(propType) || String(val).match(/\.(png|jpg|jpeg|obj|fbx|prefab)$/i)) {
+        processedVal = normalizePath(String(val));
+      }
+
+      panelsMap[panelName][propType] = processedVal;
+    });
+
+    if (order.length === 0) {
+      alert('В JSON не найдено ни одной группы панелей (проверьте формат ключей "Имя_Свойство").');
+      return;
+    }
+
+    // 2. Каждая группа = отдельная 3D-панель, раскладываем сеткой, чтобы не накладывались друг на друга
+    const cols = Math.max(1, Math.ceil(Math.sqrt(order.length)));
+    const rows = Math.ceil(order.length / cols);
+    const spacingX = 0.34;
+    const spacingY = 0.22;
+    const panelW = 0.3;
+    const panelH = 0.18;
+
+    let panelsHtml = '';
+    order.forEach((panelName, i) => {
+      const props = panelsMap[panelName];
+      const col = i % cols;
+      const row = Math.floor(i / cols);
+      const x = (col - (cols - 1) / 2) * spacingX;
+      const y = ((rows - 1) / 2 - row) * spacingY;
+
+      panelsHtml += `  <panel name="${escapeAttr(panelName)}" data-width="${panelW}" data-height="${panelH}" data-position="${x.toFixed(3)},${y.toFixed(3)},0" data-rotation="0,0,0">\n`;
+      panelsHtml += `    ${serializePropPanelDiv(props)}\n`;
+      panelsHtml += `  </panel>\n`;
+    });
+
+    const generatedTemplate = `<template id="ar-target">\n${panelsHtml}</template>`;
+
+    parseAndBuildPrefab(generatedTemplate);
+  }
+
+  function renderPanelToCanvas(panelData) {
+    const canvas = document.getElementById('render-canvas');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = panelData.bgColor || '#0a0a1e';
+    ctx.fillRect(0, 0, w, h);
+
+    if (panelData.borderColor) {
+      ctx.strokeStyle = panelData.borderColor;
+      ctx.lineWidth = 8;
+      ctx.strokeRect(4, 4, w - 8, h - 8);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+
+    if (panelData.elements) {
+      panelData.elements.forEach(el => {
+        ctx.fillStyle = el.color || '#ffffff';
+        ctx.font = `${el.fontWeight || 'normal'} ${el.fontSize || 20}px sans-serif`;
+        ctx.textAlign = 'center';
+
+        if (el.type === 'text' || el.type === 'label') {
+          ctx.fillText(el.text || '', w / 2, el.y || 50);
+        } else if (el.type === 'button') {
+          ctx.fillStyle = el.btnBg || '#00cc66';
+          ctx.fillRect(20, el.y - 30, w - 40, 50);
+          ctx.fillStyle = el.color || '#ffffff';
+          ctx.fillText(el.text || 'Button', w / 2, el.y + 5);
+        } else if (el.type === 'input') {
+          ctx.strokeStyle = '#666';
+          ctx.strokeRect(20, el.y - 20, w - 40, 40);
+          ctx.fillStyle = '#aaa';
+          ctx.fillText(el.text || 'Input...', w / 2, el.y + 5);
+        } else if (el.type === 'video') {
+          drawVideoPlaceholder(ctx, w, el);
+        } else if (el.type === 'html') {
+          drawHtmlBlockAsync(ctx, el, texture);
+        }
+      });
+    }
+
+    texture.needsUpdate = true;
+    return texture;
+  }
+
+  function drawVideoPlaceholder(ctx, w, el) {
+    const ew = el.width || (w - 40);
+    const eh = el.height || 120;
+    const ex = (w - ew) / 2;
+    const ey = el.y || 100;
+
+    ctx.fillStyle = '#000';
+    ctx.fillRect(ex, ey, ew, eh);
+    ctx.strokeStyle = '#555';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(ex, ey, ew, eh);
+
+    const cx = ex + ew / 2;
+    const cy = ey + eh / 2;
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.moveTo(cx - 18, cy - 24);
+    ctx.lineTo(cx - 18, cy + 24);
+    ctx.lineTo(cx + 26, cy);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.font = '16px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(el.label || el.src || 'Video', cx, ey + eh + 22);
+  }
+
+  function drawHtmlBlockAsync(ctx, el, texture) {
+    const ew = el.width || 220;
+    const eh = el.height || 150;
+    const ex = el.x || (256 - ew) / 2;
+    const ey = el.y || 100;
+    const html = el.html || '';
+
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${ew}" height="${eh}">
+        <foreignObject width="100%" height="100%">
+          <div xmlns="http://www.w3.org/1999/xhtml" style="width:${ew}px;height:${eh}px;overflow:hidden;">${html}</div>
+        </foreignObject>
+      </svg>`;
+
+    const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, ex, ey, ew, eh);
+      URL.revokeObjectURL(url);
+      texture.needsUpdate = true;
+    };
+    img.onerror = () => URL.revokeObjectURL(url);
+    img.src = url;
+  }
+
+  const objLoader = new THREE.OBJLoader();
+
+  function createObjectMesh(data = {}) {
+    const group = new THREE.Group();
+    group.name = data.name || 'object_' + Date.now().toString().slice(-4);
+    const srcPath = normalizePath(data.src || '');
+    group.userData = { type: 'object3d', rawData: data, src: srcPath };
+
+    const placeholder = new THREE.Mesh(
+            new THREE.BoxGeometry(0.05, 0.05, 0.05),
+            new THREE.MeshStandardMaterial({ color: 0x666666, wireframe: true })
+    );
+    placeholder.name = 'placeholder';
+    group.add(placeholder);
+
+    applyTransformData(group, data);
+    if (srcPath) loadObjIntoGroup(group, srcPath, placeholder);
+    return group;
+  }
+
+  function loadObjIntoGroup(group, src, placeholder) {
+    const path = normalizePath(src);
+    objLoader.load(path, obj => {
+      if (placeholder && placeholder.parent === group) group.remove(placeholder);
+      obj.traverse(child => {
+        if (child.isMesh) {
+          child.material = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.2, roughness: 0.6 });
+        }
+      });
+      group.add(obj);
+      group.userData.loadedObj = obj;
+    }, undefined, err => {
+      console.error('Не удалось загрузить OBJ:', path, err);
+    });
+  }
+
+  function reloadObjectModel(group) {
+    if (group.userData.loadedObj) {
+      group.remove(group.userData.loadedObj);
+      group.userData.loadedObj = null;
+    }
+    const placeholder = new THREE.Mesh(
+            new THREE.BoxGeometry(0.05, 0.05, 0.05),
+            new THREE.MeshStandardMaterial({ color: 0x666666, wireframe: true })
+    );
+    placeholder.name = 'placeholder';
+    group.add(placeholder);
+    if (group.userData.src) loadObjIntoGroup(group, group.userData.src, placeholder);
+  }
+
+  function createVideoMesh(data = {}) {
+    const width = parseFloat(data.width) || 0.2;
+    const height = parseFloat(data.height) || 0.12;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 160;
+    const ctx = canvas.getContext('2d');
+    const texture = new THREE.CanvasTexture(canvas);
+
+    const geo = new THREE.PlaneGeometry(width, height);
+    const mat = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide, transparent: true });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = data.name || 'video_' + Date.now().toString().slice(-4);
+    mesh.userData = {
+      type: 'video', rawData: data,
+      src: normalizePath(data.src || ''), label: data.label || 'Video',
+      width, height, canvas, ctx, texture
+    };
+
+    applyTransformData(mesh, data);
+    refreshVideoTexture(mesh);
+    return mesh;
+  }
+
+  function refreshVideoTexture(mesh) {
+    const { canvas, ctx } = mesh.userData;
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawVideoPlaceholder(ctx, canvas.width, {
+      width: canvas.width - 32, height: canvas.height - 60, y: 12,
+      label: mesh.userData.label, src: mesh.userData.src
+    });
+    mesh.userData.texture.needsUpdate = true;
+  }
+
+  function createHtmlMesh(data = {}, rawHtml = '') {
+    const width = parseFloat(data.width) || 0.2;
+    const height = parseFloat(data.height) || 0.14;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 180;
+    const ctx = canvas.getContext('2d');
+    const texture = new THREE.CanvasTexture(canvas);
+
+    const html = rawHtml || data.html || '<div style="color:#fff;padding:8px;">Custom HTML</div>';
+
+    const geo = new THREE.PlaneGeometry(width, height);
+    const mat = new THREE.MeshStandardMaterial({ map: texture, side: THREE.DoubleSide, transparent: true });
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = data.name || 'html_' + Date.now().toString().slice(-4);
+    mesh.userData = { type: 'html', rawData: data, html, width, height, canvas, ctx, texture };
+
+    applyTransformData(mesh, data);
+    refreshHtmlTexture(mesh);
+    return mesh;
+  }
+
+  function refreshHtmlTexture(mesh) {
+    const { canvas, ctx, html, texture } = mesh.userData;
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    drawHtmlBlockAsync(ctx, { html, x: 8, y: 8, width: canvas.width - 16, height: canvas.height - 16 }, texture);
+  }
+
+  function createPanelMesh(data = {}, innerHTML = '') {
+    const width = parseFloat(data.width) || 0.3;
+    const height = parseFloat(data.height) || 0.3;
+    const geo = new THREE.PlaneGeometry(width, height);
+
+    const panelData = parsePanelHTML(innerHTML);
+    const texture = renderPanelToCanvas(panelData);
+
+    const mat = new THREE.MeshStandardMaterial({
+      map: texture,
+      side: THREE.DoubleSide,
+      transparent: true
+    });
+
+    const mesh = new THREE.Mesh(geo, mat);
+    mesh.name = data.name || 'panel_' + Date.now().toString().slice(-4);
+    mesh.userData = {
+      type: 'panel',
+      rawData: data,
+      panelData: panelData,
+      innerHTML: innerHTML,
+      width,
+      height
+    };
+
+    applyTransformData(mesh, data);
+    return mesh;
+  }
+
+  function parsePanelHTML(html) {
+    const panelData = { bgColor: '#0a0a30', borderColor: '#00ffaa', elements: [] };
+    if (!html) return panelData;
+
+    if (html.includes('prop-panel')) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+      const el = doc.querySelector('.prop-panel');
+      const props = {};
+      if (el) {
+        for (const attr of Array.from(el.attributes)) {
+          if (attr.name.startsWith('data-')) {
+            const key = attr.name.slice(5);
+            props[key] = attr.value;
+          }
+        }
+      }
+      return buildPropPanelVisual(props);
+    }
+
+    if (html.includes('artarget-root')) {
+      panelData.bgColor = '#141428';
+      panelData.borderColor = '#FFD700';
+
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+      const groups = doc.querySelectorAll('.panel-group');
+
+      let currentY = 30;
+      groups.forEach(group => {
+        const groupName = group.getAttribute('data-name') || '';
+
+        const img = group.querySelector('img.panel-image');
+        if (img) {
+          const src = img.getAttribute('src');
+          const imgColor = img.getAttribute('data-color') || '';
+          const imgFx = img.getAttribute('data-fx') || '';
+          let imgDetails = `[IMG: ${src}]`;
+          if (imgColor) imgDetails += ` (Color: #${imgColor})`;
+          if (imgFx) imgDetails += ` (FX: ${imgFx})`;
+
+          panelData.elements.push({
+            type: 'text',
+            text: imgDetails,
+            y: currentY,
+            fontSize: 14,
+            color: '#888888'
+          });
+          currentY += 20;
+        }
+
+        const textBlock = group.querySelector('.panel-text-block');
+        if (textBlock) {
+          const color = textBlock.getAttribute('data-color') || '#ffffff';
+          const fx = textBlock.getAttribute('data-fx') || '';
+          const textSpan = textBlock.querySelector('.label-text');
+          const labelText = textSpan ? textSpan.textContent : '';
+
+          let displayStr = `${groupName}: ${labelText}`;
+          if (fx) displayStr += ` (FX: ${fx})`;
+
+          panelData.elements.push({
+            type: 'text',
+            text: displayStr,
+            y: currentY,
+            fontSize: 16,
+            color: color.startsWith('#') ? color : '#' + color
+          });
+          currentY += 24;
+        }
+
+        currentY += 10;
+      });
+      return panelData;
+    }
+
+    if (html.includes('img-panel')) {
+      panelData.bgColor = '#1a0033';
+      panelData.borderColor = '#ff66cc';
+    } else if (html.includes('ok-panel')) {
+      panelData.bgColor = '#002814';
+      panelData.borderColor = null;
+    }
+
+    const labelMatch = html.match(/class="label">([^<]+)</);
+    if (labelMatch) panelData.elements.push({ type: 'text', text: labelMatch[1], y: 40, fontSize: 24, color: panelData.borderColor });
+
+    const nameMatch = html.match(/class="name">([^<]+)</);
+    if (nameMatch) panelData.elements.push({ type: 'text', text: nameMatch[1], y: 160, fontSize: 32, fontWeight: 'bold' });
+
+    const subMatch = html.match(/class="sub">([^<]+)</);
+    if (subMatch) panelData.elements.push({ type: 'text', text: subMatch[1], y: 250, fontSize: 20, color: '#aaa' });
+
+    const btnMatch = html.match(/class="btn">([^<]+)</);
+    if (btnMatch) panelData.elements.push({ type: 'button', text: btnMatch[1], y: 480, fontSize: 32, btnBg: '#00cc66' });
+
+    const videoMatch = html.match(/<video[^>]*data-src="([^"]*)"[^>]*data-y="([^"]*)"[^>]*>/);
+    if (videoMatch) {
+      panelData.elements.push({ type: 'video', src: normalizePath(videoMatch[1]), label: 'Video', y: parseFloat(videoMatch[2]) || 150, width: 200, height: 120 });
+    }
+
+    const htmlBlockRegex = /<div class="html-block" data-raw-b64="([^"]*)" data-y="([^"]*)"[^>]*><\/div>/g;
+    let hbMatch;
+    while ((hbMatch = htmlBlockRegex.exec(html)) !== null) {
+      panelData.elements.push({ type: 'html', html: decodeHtmlB64(hbMatch[1]), y: parseFloat(hbMatch[2]) || 100, width: 220, height: 150 });
+    }
+
+    return panelData;
+  }
+
+  function encodeHtmlB64(str) {
+    return btoa(unescape(encodeURIComponent(str)));
+  }
+
+  function decodeHtmlB64(str) {
+    try { return decodeURIComponent(escape(atob(str))); } catch (e) { return ''; }
+  }
+
+  function applyTransformData(mesh, data) {
+    if (data.position) {
+      const pos = data.position.split(',').map(Number);
+      if (pos.length === 3 && !pos.some(isNaN)) mesh.position.set(pos[0], pos[1], pos[2]);
+    }
+    if (data.rotation) {
+      const rot = data.rotation.split(',').map(v => THREE.MathUtils.degToRad(parseFloat(v) || 0));
+      if (rot.length === 3) mesh.rotation.set(rot[0], rot[1], rot[2]);
+    }
+    if (data.scale) {
+      const scl = data.scale.split(',').map(Number);
+      if (scl.length === 3 && !scl.some(isNaN)) mesh.scale.set(scl[0], scl[1], scl[2]);
+    }
+  }
+
+  function loadLocalPrefab() {
+    parseAndBuildPrefab(localDefaultTemplate);
+  }
+
+  function parseAndBuildPrefab(htmlContent) {
+    editableObjects.forEach(obj => scene.remove(obj));
+    editableObjects.length = 0;
+    deselectObject();
+
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlContent, 'text/html');
+    const template = doc.querySelector('template#ar-target');
+    const root = template ? template.content : doc.body;
+
+    Array.from(root.children).forEach(node => {
+      const tag = node.tagName.toLowerCase();
+      let mesh = null;
+
+      if (tag === 'model') {
+        mesh = createObjectMesh(getDataset(node));
+      } else if (tag === 'panel') {
+        mesh = createPanelMesh(getDataset(node), node.innerHTML);
+      } else if (tag === 'video') {
+        mesh = createVideoMesh(getDataset(node));
+      } else if (tag === 'htmlblock') {
+        const ds = getDataset(node);
+        const raw = ds.rawB64 ? decodeHtmlB64(ds.rawB64) : (ds.html || '');
+        mesh = createHtmlMesh(ds, raw);
+      }
+
+      if (mesh) {
+        scene.add(mesh);
+        editableObjects.push(mesh);
+      }
+    });
+
+    updateHierarchyTree();
+  }
+
+  function getDataset(node) {
+    const data = {};
+    for (let attr of node.attributes) {
+      let name = attr.name;
+      if (name.startsWith('data-')) {
+        name = name.slice(5);
+      }
+      const camelCaseKey = name.replace(/-([a-z])/g, g => g[1].toUpperCase());
+      data[camelCaseKey] = attr.value;
+    }
+    return data;
+  }
+
+  function handleFileSelect(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => parseAndBuildPrefab(e.target.result);
+    reader.readAsText(file);
+  }
+
+  function selectObject(obj) {
+    selectedObject = obj;
+    transformControls.attach(obj);
+    updateHierarchyTree();
+    renderInspector();
+  }
+
+  function deselectObject() {
+    selectedObject = null;
+    transformControls.detach();
+    updateHierarchyTree();
+    document.getElementById('inspector-content').innerHTML = `<p style="font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.5;">Выберите элемент в сцене для редактирования.</p>`;
+  }
+
+  function updateHierarchyTree() {
+    const treeContainer = document.getElementById('tree');
+    treeContainer.innerHTML = '';
+
+    editableObjects.forEach(obj => {
+      const div = document.createElement('div');
+      div.className = 'tree-item' + (selectedObject === obj ? ' active' : '');
+      div.innerHTML = `<span>${obj.name}</span><span>${obj.userData.type}</span>`;
+      div.onclick = () => selectObject(obj);
+      treeContainer.appendChild(div);
+    });
+  }
+
+  function renderInspector() {
+    if (!selectedObject) return;
+    const container = document.getElementById('inspector-content');
+    const obj = selectedObject;
+    const pos = obj.position;
+    const scale = obj.scale;
+
+    const rotDegX = THREE.MathUtils.radToDeg(obj.rotation.x);
+    const rotDegY = THREE.MathUtils.radToDeg(obj.rotation.y);
+    const rotDegZ = THREE.MathUtils.radToDeg(obj.rotation.z);
+
+    let html = `
+        <div class="prop-group">
+          <label>Имя элемента</label>
+          <input type="text" value="${obj.name}" onchange="updateObjName(this.value)">
+        </div>
+        <div class="prop-group">
+          <label>Позиция (X, Y, Z)</label>
+          <div class="row">
+            <div><input type="number" step="0.01" value="${pos.x.toFixed(3)}" onchange="updateObjTransform('pos', 'x', this.value)"></div>
+            <div><input type="number" step="0.01" value="${pos.y.toFixed(3)}" onchange="updateObjTransform('pos', 'y', this.value)"></div>
+            <div><input type="number" step="0.01" value="${pos.z.toFixed(3)}" onchange="updateObjTransform('pos', 'z', this.value)"></div>
+          </div>
+        </div>
+        <div class="prop-group">
+          <label>Поворот (Deg X, Y, Z)</label>
+          <div class="row">
+            <div><input type="number" step="1" value="${rotDegX.toFixed(1)}" onchange="updateObjTransform('rot', 'x', this.value)"></div>
+            <div><input type="number" step="1" value="${rotDegY.toFixed(1)}" onchange="updateObjTransform('rot', 'y', this.value)"></div>
+            <div><input type="number" step="1" value="${rotDegZ.toFixed(1)}" onchange="updateObjTransform('rot', 'z', this.value)"></div>
+          </div>
+        </div>
+        <div class="prop-group">
+          <label>Масштаб (X, Y, Z)</label>
+          <div class="row">
+            <div><input type="number" step="0.01" value="${scale.x.toFixed(3)}" onchange="updateObjTransform('scale', 'x', this.value)"></div>
+            <div><input type="number" step="0.01" value="${scale.y.toFixed(3)}" onchange="updateObjTransform('scale', 'y', this.value)"></div>
+            <div><input type="number" step="0.01" value="${scale.z.toFixed(3)}" onchange="updateObjTransform('scale', 'z', this.value)"></div>
+          </div>
+        </div>
+      `;
+
+    if (obj.userData.type === 'panel') {
+      const w = obj.userData.width != null ? obj.userData.width : (parseFloat(obj.userData.rawData && obj.userData.rawData.width) || 0.3);
+      const h = obj.userData.height != null ? obj.userData.height : (parseFloat(obj.userData.rawData && obj.userData.rawData.height) || 0.3);
+      html += `
+          <hr style="border-color:#3c3c3c; margin: 12px 0;">
+          <div class="prop-group">
+            <h3>Размер панели</h3>
+            <div class="row">
+              <div><label>Ширина (м)</label><input type="number" step="0.01" min="0.01" value="${w}" onchange="updateObjectProp('width', this.value)"></div>
+              <div><label>Высота (м)</label><input type="number" step="0.01" min="0.01" value="${h}" onchange="updateObjectProp('height', this.value)"></div>
+            </div>
+          </div>
+        `;
+
+      if (obj.userData.panelData && obj.userData.panelData.props) {
+        const props = obj.userData.panelData.props;
+        html += `
+          <hr style="border-color:#3c3c3c; margin: 12px 0;">
+          <div class="prop-group">
+            <h3>Группа из JSON-дизайна: ${props.group || ''}</h3>
+            <label>Font</label>
+            <input type="text" value="${props.font || ''}" onchange="updateDesignPanelProp('font', this.value)">
+            <label>Color (HEX, без #)</label>
+            <input type="text" value="${props.color || ''}" onchange="updateDesignPanelProp('color', this.value)">
+            <label>Image</label>
+            <input type="text" value="${props.image || ''}" onchange="updateDesignPanelProp('image', this.value)">
+            <label>FX</label>
+            <input type="text" value="${props.fx || ''}" onchange="updateDesignPanelProp('fx', this.value)">
+            <label>Sound</label>
+            <input type="text" value="${props.sound || ''}" onchange="updateDesignPanelProp('sound', this.value)">
+            <label>Text</label>
+            <input type="text" value="${props.text || ''}" onchange="updateDesignPanelProp('text', this.value)">
+            <label>Prefab</label>
+            <input type="text" value="${props.prefab || ''}" onchange="updateDesignPanelProp('prefab', this.value)">
+          </div>
+        `;
+      } else {
+        html += `
+          <hr style="border-color:#3c3c3c; margin: 12px 0;">
+          <div class="prop-group">
+            <h3>UI Компоненты Панели</h3>
+            <button onclick="addUIElement('text')" style="margin-top:6px;">+ Текст</button>
+            <button onclick="addUIElement('button')">+ Кнопка</button>
+            <button onclick="addUIElement('input')">+ Поле ввода</button>
+          </div>
+          <div id="ui-elements-list"></div>
+        `;
+      }
+    }
+
+    if (obj.userData.type === 'video') {
+      html += `
+          <hr style="border-color:#3c3c3c; margin: 12px 0;">
+          <div class="prop-group">
+            <label>Источник (URL)</label>
+            <input type="text" value="${obj.userData.src || ''}" onchange="updateObjectProp('src', this.value)">
+            <label>Подпись</label>
+            <input type="text" value="${obj.userData.label || ''}" onchange="updateObjectProp('label', this.value)">
+            <div class="row">
+              <div><label>Ширина (м)</label><input type="number" step="0.01" value="${obj.userData.width}" onchange="updateObjectProp('width', this.value)"></div>
+              <div><label>Высота (м)</label><input type="number" step="0.01" value="${obj.userData.height}" onchange="updateObjectProp('height', this.value)"></div>
+            </div>
+          </div>
+        `;
+    }
+
+    if (obj.userData.type === 'html') {
+      html += `
+          <hr style="border-color:#3c3c3c; margin: 12px 0;">
+          <div class="prop-group">
+            <label>HTML содержимое</label>
+            <textarea rows="4" style="width:100%; background:#3c3c3c; border:1px solid #555; color:#fff; font-size:11px; margin-bottom:8px; border-radius:2px; padding:4px 6px;" onchange="updateObjectProp('html', this.value)">${obj.userData.html || ''}</textarea>
+            <div class="row">
+              <div><label>Ширина (м)</label><input type="number" step="0.01" value="${obj.userData.width}" onchange="updateObjectProp('width', this.value)"></div>
+              <div><label>Высота (м)</label><input type="number" step="0.01" value="${obj.userData.height}" onchange="updateObjectProp('height', this.value)"></div>
+            </div>
+          </div>
+        `;
+    }
+
+    if (obj.userData.type === 'object3d') {
+      html += `
+          <hr style="border-color:#3c3c3c; margin: 12px 0;">
+          <div class="prop-group">
+            <label>Файл в /assets/</label>
+            <input type="text" value="${obj.userData.src || ''}" onchange="updateObjectProp('src', this.value)">
+          </div>
+        `;
+    }
+
+    html += `<button class="btn-danger" onclick="deleteSelectedObject()" style="margin-top:16px; width:100%;">Удалить объект</button>`;
+    container.innerHTML = html;
+
+    if (obj.userData.type === 'panel' && !(obj.userData.panelData && obj.userData.panelData.props)) {
+      renderUIElementsList();
+    }
+  }
+
+  function updateObjName(val) {
+    if (selectedObject) {
+      selectedObject.name = val;
+      updateHierarchyTree();
+    }
+  }
+
+  function updateObjTransform(type, axis, value) {
+    if (!selectedObject) return;
+    const val = parseFloat(value) || 0;
+    if (type === 'pos') selectedObject.position[axis] = val;
+    if (type === 'rot') selectedObject.rotation[axis] = THREE.MathUtils.degToRad(val);
+    if (type === 'scale') selectedObject.scale[axis] = val || 0.001;
+  }
+
+  function updateInspectorFromTransform() {
+    if (!selectedObject) return;
+    renderInspector();
+  }
+
+  function renderUIElementsList() {
+    const container = document.getElementById('ui-elements-list');
+    if (!container || !selectedObject || !selectedObject.userData.panelData) return;
+
+    const elements = selectedObject.userData.panelData.elements || [];
+    let html = '';
+
+    elements.forEach((el, index) => {
+      if (el.type === 'video') {
+        html += `
+            <div style="background:rgba(15,23,42,.8); padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid var(--border);">
+              <label>Тип: video</label>
+              <label>Источник (URL)</label>
+              <input type="text" value="${el.src || ''}" onchange="updateUIElement(${index}, 'src', this.value)">
+              <label>Подпись</label>
+              <input type="text" value="${el.label || ''}" onchange="updateUIElement(${index}, 'label', this.value)">
+              <div class="row">
+                <div><label>Y Pos</label><input type="number" value="${el.y || 0}" onchange="updateUIElement(${index}, 'y', this.value)"></div>
+                <div><label>Ширина</label><input type="number" value="${el.width || 200}" onchange="updateUIElement(${index}, 'width', this.value)"></div>
+                <div><label>Высота</label><input type="number" value="${el.height || 120}" onchange="updateUIElement(${index}, 'height', this.value)"></div>
+              </div>
+              <button class="btn-danger" style="font-size:11px; padding:4px 8px;" onclick="removeUIElement(${index})">Удалить</button>
+            </div>
+          `;
+      } else if (el.type === 'html') {
+        html += `
+            <div style="background:rgba(15,23,42,.8); padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid var(--border);">
+              <label>Тип: other html</label>
+              <textarea rows="4" style="width:100%; background:#3c3c3c; border:1px solid #555; color:#fff; font-size:11px; margin-bottom:8px; border-radius:2px; padding:4px 6px;" onchange="updateUIElement(${index}, 'html', this.value)">${el.html || ''}</textarea>
+              <div class="row">
+                <div><label>Y Pos</label><input type="number" value="${el.y || 0}" onchange="updateUIElement(${index}, 'y', this.value)"></div>
+                <div><label>Ширина</label><input type="number" value="${el.width || 220}" onchange="updateUIElement(${index}, 'width', this.value)"></div>
+                <div><label>Высота</label><input type="number" value="${el.height || 150}" onchange="updateUIElement(${index}, 'height', this.value)"></div>
+              </div>
+              <button class="btn-danger" style="font-size:11px; padding:4px 8px;" onclick="removeUIElement(${index})">Удалить</button>
+            </div>
+          `;
+      } else {
+        html += `
+            <div style="background:rgba(15,23,42,.8); padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid var(--border);">
+              <label>Тип: ${el.type}</label>
+              <input type="text" value="${el.text || ''}" onchange="updateUIElement(${index}, 'text', this.value)">
+              <div class="row">
+                <div><label>Y Pos</label><input type="number" value="${el.y || 0}" onchange="updateUIElement(${index}, 'y', this.value)"></div>
+                <div><label>Размер</label><input type="number" value="${el.fontSize || 20}" onchange="updateUIElement(${index}, 'fontSize', this.value)"></div>
+              </div>
+              <button class="btn-danger" style="font-size:11px; padding:4px 8px;" onclick="removeUIElement(${index})">Удалить</button>
+            </div>
+          `;
+      }
+    });
+    container.innerHTML = html;
+  }
+
+  function addUIElement(type) {
+    if (!selectedObject || !selectedObject.userData.panelData) return;
+    const elements = selectedObject.userData.panelData.elements;
+
+    if (type === 'text') elements.push({ type: 'text', text: 'Новый текст', y: 100, fontSize: 24, color: '#ffffff' });
+    if (type === 'button') elements.push({ type: 'button', text: 'Кнопка', y: 200, fontSize: 28, btnBg: '#00cc66' });
+    if (type === 'input') elements.push({ type: 'input', text: 'Введите текст...', y: 280, fontSize: 20 });
+    if (type === 'video') elements.push({ type: 'video', src: '', label: 'Video', y: 150, width: 200, height: 120 });
+    if (type === 'html') elements.push({ type: 'html', html: '<div style="color:#fff;padding:8px;">Custom HTML</div>', y: 100, width: 220, height: 150 });
+
+    refreshPanelTexture(selectedObject);
+    renderUIElementsList();
+  }
+
+  function updateUIElement(index, key, value) {
+    if (!selectedObject || !selectedObject.userData.panelData) return;
+    const el = selectedObject.userData.panelData.elements[index];
+    if (el) {
+      if (key === 'src') {
+        el[key] = normalizePath(value);
+      } else {
+        el[key] = (key === 'y' || key === 'fontSize' || key === 'width' || key === 'height') ? parseInt(value) : value;
+      }
+      refreshPanelTexture(selectedObject);
+    }
+  }
+
+  function removeUIElement(index) {
+    if (!selectedObject || !selectedObject.userData.panelData) return;
+    selectedObject.userData.panelData.elements.splice(index, 1);
+    refreshPanelTexture(selectedObject);
+    renderUIElementsList();
+  }
+
+  function refreshPanelTexture(obj) {
+    const texture = renderPanelToCanvas(obj.userData.panelData);
+    obj.material.map = texture;
+    obj.material.needsUpdate = true;
+  }
+
+  // Редактирование свойств панели, сгенерированной из JSON-дизайна (Font/Color/Image/FX/Sound/Text/Prefab)
+  function updateDesignPanelProp(key, value) {
+    if (!selectedObject || !selectedObject.userData.panelData || !selectedObject.userData.panelData.props) return;
+    const props = selectedObject.userData.panelData.props;
+
+    if (key === 'image' || key === 'prefab') {
+      value = value ? normalizePath(value) : '';
+    }
+
+    if (value) {
+      props[key] = value;
+    } else {
+      delete props[key];
+    }
+
+    const newPanelData = buildPropPanelVisual(props);
+    selectedObject.userData.panelData = newPanelData;
+    selectedObject.userData.innerHTML = serializePropPanelDiv(props);
+    refreshPanelTexture(selectedObject);
+  }
+
+  function updateObjectProp(key, value) {
+    if (!selectedObject) return;
+    const type = selectedObject.userData.type;
+
+    if (type === 'video') {
+      if (key === 'width' || key === 'height') {
+        selectedObject.userData[key] = parseFloat(value) || 0.01;
+        rebuildPlaneGeometry(selectedObject);
+      } else if (key === 'src') {
+        selectedObject.userData.src = normalizePath(value);
+        refreshVideoTexture(selectedObject);
+      } else {
+        selectedObject.userData[key] = value;
+        refreshVideoTexture(selectedObject);
+      }
+    } else if (type === 'html') {
+      if (key === 'width' || key === 'height') {
+        selectedObject.userData[key] = parseFloat(value) || 0.01;
+        rebuildPlaneGeometry(selectedObject);
+      } else if (key === 'html') {
+        selectedObject.userData.html = value;
+        refreshHtmlTexture(selectedObject);
+      }
+    } else if (type === 'panel') {
+      if (key === 'width' || key === 'height') {
+        const num = parseFloat(value) || 0.01;
+        selectedObject.userData[key] = num;
+        if (!selectedObject.userData.rawData) selectedObject.userData.rawData = {};
+        selectedObject.userData.rawData[key] = String(num);
+        rebuildPlaneGeometry(selectedObject);
+      }
+    } else if (type === 'object3d') {
+      if (key === 'src') {
+        selectedObject.userData.src = normalizePath(value);
+        reloadObjectModel(selectedObject);
+      }
+    }
+  }
+
+  function rebuildPlaneGeometry(mesh) {
+    mesh.geometry.dispose();
+    mesh.geometry = new THREE.PlaneGeometry(mesh.userData.width, mesh.userData.height);
+  }
+
+  function addObject3D() {
+    const filename = prompt('Имя файла в /assets/ (например model.obj):', 'model.obj');
+    if (filename === null || filename.trim() === '') return;
+    const object = createObjectMesh({
+      name: 'Object_' + Date.now().toString().slice(-3),
+      src: normalizePath(filename.trim()),
+      position: '0,0,0',
+      rotation: '0,0,0'
+    });
+    scene.add(object);
+    editableObjects.push(object);
+    selectObject(object);
+  }
+
+  function addVideoObject3D() {
+    const video = createVideoMesh({
+      name: 'Video_' + Date.now().toString().slice(-3),
+      src: '', label: 'Video', width: 0.2, height: 0.12,
+      position: '0,0,0', rotation: '0,0,0'
+    });
+    scene.add(video);
+    editableObjects.push(video);
+    selectObject(video);
+  }
+
+  function addHtmlObject3D() {
+    const htmlObj = createHtmlMesh({
+      name: 'HTML_' + Date.now().toString().slice(-3),
+      width: 0.2, height: 0.14,
+      position: '0,0,0', rotation: '0,0,0'
+    }, '<div style="color:#fff;padding:8px;">Custom HTML</div>');
+    scene.add(htmlObj);
+    editableObjects.push(htmlObj);
+    selectObject(htmlObj);
+  }
+
+  function addPanel() {
+    const panel = createPanelMesh(
+            {
+              name: 'Panel_' + Date.now().toString().slice(-3),
+              width: '0.3',
+              height: '0.3',
+              position: '0,0,0',
+              rotation: '0,0,0'
+            },
+            '<div class="panel"><div class="label">New Panel</div></div>'
+    );
+    scene.add(panel);
+    editableObjects.push(panel);
+    selectObject(panel);
+  }
+
+  function deleteSelectedObject() {
+    if (!selectedObject) return;
+    const index = editableObjects.indexOf(selectedObject);
+    if (index > -1) editableObjects.splice(index, 1);
+
+    scene.remove(selectedObject);
+    deselectObject();
+    updateHierarchyTree();
+  }
+
+  function exportHTML() {
+    let output = `<template id="ar-target">\n`;
+
+    editableObjects.forEach(obj => {
+      const pos = `${obj.position.x.toFixed(3)},${obj.position.y.toFixed(3)},${obj.position.z.toFixed(3)}`;
+      const rotDegX = THREE.MathUtils.radToDeg(obj.rotation.x);
+      const rotDegY = THREE.MathUtils.radToDeg(obj.rotation.y);
+      const rotDegZ = THREE.MathUtils.radToDeg(obj.rotation.z);
+      const rot = `${rotDegX.toFixed(0)},${rotDegY.toFixed(0)},${rotDegZ.toFixed(0)}`;
+      const scl = `${obj.scale.x.toFixed(3)},${obj.scale.y.toFixed(3)},${obj.scale.z.toFixed(3)}`;
+
+      if (obj.userData.type === 'object3d') {
+        output += `  <model\n    name="${obj.name}"\n    data-src="${normalizePath(obj.userData.src || '')}"\n    data-position="${pos}"\n    data-rotation="${rot}"\n    data-scale="${scl}"\n  ></model>\n`;
+      } else if (obj.userData.type === 'panel') {
+        const pw = obj.userData.width != null ? obj.userData.width : (obj.userData.rawData && obj.userData.rawData.width) || '0.3';
+        const ph = obj.userData.height != null ? obj.userData.height : (obj.userData.rawData && obj.userData.rawData.height) || '0.3';
+        output += `  <panel\n    name="${obj.name}"\n    data-width="${pw}"\n    data-height="${ph}"\n    data-position="${pos}"\n    data-rotation="${rot}"\n    data-scale="${scl}"\n  >\n`;
+        output += obj.userData.innerHTML || `    <div class="panel"></div>\n`;
+        output += `  </panel>\n`;
+      } else if (obj.userData.type === 'video') {
+        output += `  <video\n    name="${obj.name}"\n    data-src="${normalizePath(obj.userData.src || '')}"\n    data-label="${obj.userData.label || ''}"\n    data-width="${obj.userData.width}"\n    data-height="${obj.userData.height}"\n    data-position="${pos}"\n    data-rotation="${rot}"\n    data-scale="${scl}"\n  ></video>\n`;
+      } else if (obj.userData.type === 'html') {
+        output += `  <htmlblock\n    name="${obj.name}"\n    data-raw-b64="${encodeHtmlB64(obj.userData.html || '')}"\n    data-width="${obj.userData.width}"\n    data-height="${obj.userData.height}"\n    data-position="${pos}"\n    data-rotation="${rot}"\n    data-scale="${scl}"\n  ></htmlblock>\n`;
+      }
+    });
+
+    output += `</template>`;
+
+    const blob = new Blob([output], { type: 'text/html' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'artarget.html';
+    a.click();
+  }
+
+  window.onload = init3D;
+
+</script>
+</body>
+</html>

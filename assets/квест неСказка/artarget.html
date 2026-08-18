@@ -1,0 +1,44 @@
+<template id="ar-target">
+  <sphere
+    name="sphere"
+    data-radius="0.05"
+    data-position="0.000,0.000,0.000"
+    data-rotation="0,0,0"
+  ></sphere>
+  <panel
+    name="textPanel"
+    data-width="0.2"
+    data-height="0.2"
+    data-position="-0.120,0.000,0.020"
+    data-rotation="-90,20,0"
+  >
+    <div class="panel">
+      <div class="text">{{textLabel}}</div>
+      <div class="text">{{title}}</div>
+      <div class="text">{{subtitle}}</div>
+    </div>
+  </panel>
+  <panel
+    name="imgPanel"
+    data-width="0.2"
+    data-height="0.2"
+    data-position="0.120,0.000,0.020"
+    data-rotation="-90,-20,0"
+  >
+    <div class="panel">
+      <div class="text">{{imgLabel}}</div>
+      <div class="text">{{title}}</div>
+    </div>
+  </panel>
+  <panel
+    name="okButton"
+    data-width="0.2"
+    data-height="0.2"
+    data-position="0.000,0.054,0.135"
+    data-rotation="-90,0,0"
+  >
+    <div class="panel">
+      <div class="button">{{okText}}</div>
+    </div>
+  </panel>
+</template>

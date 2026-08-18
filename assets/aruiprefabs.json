@@ -1,0 +1,60 @@
+[
+  [
+    "id",
+    "name",
+    "QuestScreenDesign ID"
+  ],
+  [
+    "SplashScreen",
+    "SplashScreen"
+  ],
+  [
+    "Legend",
+    "Legend"
+  ],
+  [
+    "SoundSettings",
+    "SoundSettings"
+  ],
+  [
+    "AddName",
+    "AddName"
+  ],
+  [
+    "TeamNumber",
+    "TeamNumber"
+  ],
+  [
+    "AlertOferta",
+    "AlertOferta"
+  ],
+  [
+    "FinalTimerPanel",
+    "FinalTimerPanel"
+  ],
+  [
+    "InfoPanel (Reaction)",
+    "InfoPanel (Reaction)"
+  ],
+  [
+    "QuestStartPanel",
+    "QuestStartPanel"
+  ],
+  [
+    "Map",
+    "Map"
+  ],
+  [
+    "FinalWord",
+    "FinalWord"
+  ],
+  [
+    "Help1"
+  ],
+  [
+    "Help2"
+  ],
+  [
+    "Help3"
+  ]
+]
