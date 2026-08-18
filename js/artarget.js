@@ -1,11 +1,7 @@
 import * as THREE from 'three';
 
-/**
- * Принудительно скрывает старый 2D DOM-оверлей
- */
 function forceHideDOMOverlay() {
-    const selectorList = ['#question-panel', '#ui-overlay', '#overlay', '.question-panel', '.ui-overlay'];
-    selectorList.forEach(selector => {
+    ['#question-panel', '#ui-overlay', '#overlay', '.question-panel', '.ui-overlay'].forEach(selector => {
         document.querySelectorAll(selector).forEach(el => {
             el.style.setProperty('display', 'none', 'important');
             el.style.setProperty('visibility', 'hidden', 'important');
@@ -21,9 +17,6 @@ export class ModelFactory {
         this.mouse = new THREE.Vector2();
     }
 
-    /**
-     * Основная точка входа генерации AR-таргета
-     */
     async createArTarget(targetData = '', options = {}) {
         forceHideDOMOverlay();
 
@@ -38,22 +31,15 @@ export class ModelFactory {
         const group = new THREE.Group();
         group.name = `arTarget_${groupName}`;
 
-        // 1. Центральный 3D-маркер (сфера)
+        // 1. Центральная отладочная сфера (Ярко-зеленая для проверки видимости 3D)
         const sphere = this._createSphere();
         group.add(sphere);
 
-        // 2. Загружаем фоновое изображение (если есть)
-        let loadedImage = null;
-        const imageSrc = targetInfo.imageSrc || targetInfo.image || '';
-        if (imageSrc) {
-            loadedImage = await this._loadImage(imageSrc);
-        }
-
-        // 3. Создаем 3D-панель с вопросом (Direct Canvas Render)
-        const questionMesh = this._createQuestionPanelMesh(targetInfo, 0, loadedImage);
+        // 2. Генерация панели с HTML кнопкой "Надо выбрать как поступить"
+        const questionMesh = await this._buildDebugHtmlPanelMesh(title, targetInfo);
         group.add(questionMesh);
 
-        // 4. Создаем 3D-кнопку OK
+        // 3. Генерация стандартной 3D-кнопки OK
         const okMesh = this._createOkButtonMesh(targetInfo.okText ?? 'OK');
         group.add(okMesh);
 
@@ -64,12 +50,9 @@ export class ModelFactory {
             sphere,
             questionPanel: questionMesh,
             okButton: okMesh,
-            slideIndex: 0,
-            loadedImage,
             onOk
         };
 
-        // 5. Привязка 3D Raycasting (клики)
         if (camera) {
             this._bind3DInteractions(group, camera, domElement);
         }
@@ -78,117 +61,65 @@ export class ModelFactory {
     }
 
     createArTargetSync(targetData = '', options = {}) {
-        // Синхронный метод вызывает тот же Canvas-генератор без ожидания картинок
         return this.createArTarget(targetData, options);
     }
 
-    // ─── Direct Canvas Rendering ───────────────────────────────────────────
+    // ─── Рендеринг HTML-кнопки в 3D Текстуру ─────────────────────────────
 
-    _createQuestionPanelMesh(targetInfo, slideIndex = 0, loadedImage = null) {
-        const canvas = document.createElement('canvas');
-        const cw = (canvas.width = 512);
-        const ch = (canvas.height = 600);
-        const ctx = canvas.getContext('2d');
+    async _buildDebugHtmlPanelMesh(title, targetInfo) {
+        const questionText = targetInfo.question || targetInfo.mainText || 'Выберите действие для продолжения:';
 
-        // Фон карточки
-        ctx.fillStyle = 'rgba(10, 10, 20, 0.95)';
-        this._roundRect(ctx, 0, 0, cw, ch, 24);
-        ctx.fill();
+        // Формируем чистый HTML-шаблон для рендеринга
+        const htmlContent = `
+            <div style="
+                width: 380px; 
+                height: 450px; 
+                background: rgba(10, 10, 20, 0.95); 
+                border: 2px solid #00ffaa; 
+                border-radius: 16px; 
+                padding: 20px; 
+                box-sizing: border-box; 
+                font-family: sans-serif; 
+                color: #ffffff;
+                display: flex;
+                flex-direction: column;
+                justify-content: space-between;
+                align-items: center;
+                text-align: center;
+            ">
+                <div style="font-size: 20px; font-weight: bold; color: #00ffaa; text-transform: uppercase;">
+                    ${title || 'ОТЛАДКА AR'}
+                </div>
+                
+                <div style="font-size: 15px; color: #f8fafc; line-height: 1.4;">
+                    ${questionText}
+                </div>
 
-        // Обводка
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
-        ctx.lineWidth = 4;
-        ctx.stroke();
+                <!-- ТЕСТОВАЯ HTML КНОПКА -->
+                <button style="
+                    width: 100%;
+                    padding: 16px;
+                    background: #ffaa00;
+                    color: #000000;
+                    border: none;
+                    border-radius: 10px;
+                    font-size: 16px;
+                    font-weight: bold;
+                    cursor: pointer;
+                    box-shadow: 0 4px 10px rgba(255, 170, 0, 0.4);
+                ">
+                    Надо выбрать как поступить
+                </button>
+            </div>
+        `;
 
-        // Заголовок
-        const title = targetInfo.title ?? targetInfo.name ?? '';
-        ctx.fillStyle = '#00ffaa';
-        ctx.font = 'bold 26px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(title.toUpperCase(), cw / 2, 45);
-
-        let currentY = 70;
-
-        // Отрисовка изображения (если загружено)
-        if (loadedImage) {
-            const imgH = 160;
-            const imgW = cw - 40;
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
-            this._roundRect(ctx, 20, currentY, imgW, imgH, 12);
-            ctx.fill();
-
-            // Пропорциональное вписывание картинки
-            const aspect = loadedImage.width / loadedImage.height;
-            let drawW = imgW;
-            let drawH = imgW / aspect;
-            if (drawH > imgH) {
-                drawH = imgH;
-                drawW = imgH * aspect;
-            }
-            const drawX = 20 + (imgW - drawW) / 2;
-            const drawY = currentY + (imgH - drawH) / 2;
-
-            ctx.drawImage(loadedImage, drawX, drawY, drawW, drawH);
-            currentY += imgH + 20;
+        let texture;
+        try {
+            texture = await this._htmlToTexture(htmlContent, 380, 450);
+        } catch (e) {
+            console.warn('[AR] SVG render failed, using Canvas fallback', e);
+            texture = this._createCanvasFallbackTexture(title, questionText);
         }
-
-        // Текст вопроса
-        const question = targetInfo.question || targetInfo.mainText || '';
-        ctx.fillStyle = '#f8fafc';
-        ctx.font = '20px sans-serif';
-        ctx.textAlign = 'center';
-        currentY = this._wrapText(ctx, question, cw / 2, currentY, cw - 50, 28);
-
-        currentY += 20;
-
-        // Интерактивное тело (Варианты / Слайдер)
-        const answerType = targetInfo.answerType || 'Slide';
-        const options = targetInfo.options || [];
-
-        if (answerType === 'Button') {
-            options.forEach((opt, idx) => {
-                const btnY = currentY + idx * 55;
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-                this._roundRect(ctx, 30, btnY, cw - 60, 45, 10);
-                ctx.fill();
-                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-                ctx.stroke();
-
-                ctx.fillStyle = '#ffffff';
-                ctx.font = '18px sans-serif';
-                ctx.textAlign = 'left';
-                ctx.fillText(opt.text || `Вариант ${idx + 1}`, 45, btnY + 28);
-            });
-        } else {
-            // Slider / Default
-            const currentText = options[slideIndex]?.text || targetInfo.mainText || '';
-
-            // Стрелка Назад
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            this._roundRect(ctx, 30, ch - 80, 50, 50, 10);
-            ctx.fill();
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 22px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText('◄', 55, ch - 48);
-
-            // Текст слайда
-            ctx.fillStyle = '#ffffff';
-            ctx.font = '18px sans-serif';
-            this._wrapText(ctx, currentText, cw / 2, ch - 65, cw - 180, 24);
-
-            // Стрелка Вперед
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-            this._roundRect(ctx, cw - 80, ch - 80, 50, 50, 10);
-            ctx.fill();
-            ctx.fillStyle = '#ffffff';
-            ctx.font = 'bold 22px sans-serif';
-            ctx.fillText('►', cw - 55, ch - 48);
-        }
-
-        const texture = new THREE.CanvasTexture(canvas);
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.needsUpdate = true;
 
         const mesh = new THREE.Mesh(
             new THREE.PlaneGeometry(0.32, 0.38),
@@ -201,29 +132,96 @@ export class ModelFactory {
         return mesh;
     }
 
+    _htmlToTexture(html, width, height) {
+        return new Promise((resolve, reject) => {
+            const svg = `
+<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}">
+  <foreignObject width="100%" height="100%">
+    <div xmlns="http://www.w3.org/1999/xhtml">
+      ${html}
+    </div>
+  </foreignObject>
+</svg>`.trim();
+
+            const blob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const img = new Image();
+
+            img.onload = () => {
+                setTimeout(() => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url);
+
+                    const tex = new THREE.CanvasTexture(canvas);
+                    tex.colorSpace = THREE.SRGBColorSpace;
+                    tex.needsUpdate = true;
+                    resolve(tex);
+                }, 30);
+            };
+
+            img.onerror = (err) => {
+                URL.revokeObjectURL(url);
+                reject(err);
+            };
+
+            img.src = url;
+        });
+    }
+
+    _createCanvasFallbackTexture(title, text) {
+        const canvas = document.createElement('canvas');
+        canvas.width = 380;
+        canvas.height = 450;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = 'rgba(10, 10, 20, 0.95)';
+        ctx.fillRect(0, 0, 380, 450);
+        ctx.strokeStyle = '#00ffaa';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(2, 2, 376, 446);
+
+        ctx.fillStyle = '#00ffaa';
+        ctx.font = 'bold 22px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(title || 'ОТЛАДКА AR', 190, 50);
+
+        ctx.fillStyle = '#ffffff';
+        ctx.font = '16px sans-serif';
+        ctx.fillText(text, 190, 120);
+
+        // Отрисовка кнопки
+        ctx.fillStyle = '#ffaa00';
+        ctx.fillRect(30, 320, 320, 60);
+        ctx.fillStyle = '#000000';
+        ctx.font = 'bold 16px sans-serif';
+        ctx.fillText('Надо выбрать как поступить', 190, 355);
+
+        const tex = new THREE.CanvasTexture(canvas);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        tex.needsUpdate = true;
+        return tex;
+    }
+
     _createOkButtonMesh(okText = 'OK') {
         const canvas = document.createElement('canvas');
-        const cw = (canvas.width = 256);
-        const ch = (canvas.height = 96);
+        canvas.width = 256;
+        canvas.height = 96;
         const ctx = canvas.getContext('2d');
 
         ctx.fillStyle = 'rgba(0, 40, 20, 0.95)';
-        this._roundRect(ctx, 0, 0, cw, ch, 16);
-        ctx.fill();
-
+        ctx.fillRect(0, 0, 256, 96);
         ctx.fillStyle = '#00cc66';
-        this._roundRect(ctx, 10, 10, cw - 20, ch - 20, 12);
-        ctx.fill();
-
-        ctx.strokeStyle = '#00ff99';
-        ctx.lineWidth = 3;
-        ctx.stroke();
+        ctx.fillRect(10, 10, 236, 76);
 
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 36px sans-serif';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText(okText, cw / 2, ch / 2);
+        ctx.fillText(okText, 128, 48);
 
         const texture = new THREE.CanvasTexture(canvas);
         texture.colorSpace = THREE.SRGBColorSpace;
@@ -236,11 +234,8 @@ export class ModelFactory {
         mesh.name = 'okButton';
         mesh.position.set(0, -0.22, 0.02);
         mesh.rotation.set(-Math.PI / 2, 0, 0);
-        mesh.userData.texture = texture;
         return mesh;
     }
-
-    // ─── Raycasting & Interactions ────────────────────────────────────────
 
     _bind3DInteractions(group, camera, domElement) {
         const onClick = (event) => {
@@ -263,14 +258,8 @@ export class ModelFactory {
 
             if (intersects.length > 0) {
                 const hit = intersects[0];
-                const meshName = hit.object.name;
-
-                if (meshName === 'okButton') {
-                    if (typeof group.userData.onOk === 'function') {
-                        group.userData.onOk(group.userData.targetInfo);
-                    }
-                } else if (meshName === 'questionPanel' && hit.uv) {
-                    this._handlePanelClick(group, hit.uv);
+                if (hit.object.name === 'okButton' && typeof group.userData.onOk === 'function') {
+                    group.userData.onOk(group.userData.targetInfo);
                 }
             }
         };
@@ -279,92 +268,14 @@ export class ModelFactory {
         targetEl.addEventListener('pointerdown', onClick);
     }
 
-    _handlePanelClick(group, uv) {
-        const info = group.userData.targetInfo;
-        const options = info.options || [];
-
-        // Переключение слайдера внизу 3D-панели (UV Y < 0.2)
-        if (uv.y < 0.2) {
-            let updated = false;
-            if (uv.x < 0.25 && group.userData.slideIndex > 0) {
-                group.userData.slideIndex--;
-                updated = true;
-            } else if (uv.x > 0.75 && group.userData.slideIndex < options.length - 1) {
-                group.userData.slideIndex++;
-                updated = true;
-            }
-
-            if (updated) {
-                const oldMesh = group.userData.questionPanel;
-                const newMesh = this._createQuestionPanelMesh(
-                    info,
-                    group.userData.slideIndex,
-                    group.userData.loadedImage
-                );
-
-                if (oldMesh) {
-                    oldMesh.material.map.dispose();
-                    oldMesh.material.map = newMesh.material.map;
-                    oldMesh.material.needsUpdate = true;
-                }
-            }
-        }
-    }
-
-    // ─── Helpers ───────────────────────────────────────────────────────────
-
-    _loadImage(src) {
-        return new Promise((resolve) => {
-            const img = new Image();
-            img.crossOrigin = 'Anonymous';
-            img.onload = () => resolve(img);
-            img.onerror = () => resolve(null);
-            img.src = src;
-        });
-    }
-
     _createSphere() {
-        const geo = new THREE.SphereGeometry(0.01, 24, 24);
+        const geo = new THREE.SphereGeometry(0.02, 24, 24);
         const mat = new THREE.MeshStandardMaterial({
-            color: 0xff00ff,
-            emissive: 0xff00ff,
-            emissiveIntensity: 0.2
+            color: 0x00ff00,
+            emissive: 0x00ff00,
+            emissiveIntensity: 0.5
         });
         return new THREE.Mesh(geo, mat);
-    }
-
-    _roundRect(ctx, x, y, width, height, radius) {
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.lineTo(x + width - radius, y);
-        ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-        ctx.lineTo(x + width, y + height - radius);
-        ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-        ctx.lineTo(x + radius, y + height);
-        ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-        ctx.closePath();
-    }
-
-    _wrapText(ctx, text, x, y, maxWidth, lineHeight) {
-        const words = text.split(' ');
-        let line = '';
-        let currentY = y;
-
-        for (let n = 0; n < words.length; n++) {
-            const testLine = line + words[n] + ' ';
-            const metrics = ctx.measureText(testLine);
-            if (metrics.width > maxWidth && n > 0) {
-                ctx.fillText(line, x, currentY);
-                line = words[n] + ' ';
-                currentY += lineHeight;
-            } else {
-                line = testLine;
-            }
-        }
-        ctx.fillText(line, x, currentY);
-        return currentY;
     }
 }
 
