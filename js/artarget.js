@@ -81,13 +81,17 @@ export class ModelFactory {
         const panels = template.querySelectorAll('panel');
 
         const interactiveBodyHtml = buildInteractiveBodyHtml(targetInfo);
-        const imageSrc = targetInfo.imageSrc || targetInfo.image || '';
+        
+        let imageSrc = targetInfo.imageSrc || targetInfo.image || '';
+        if (imageSrc && !imageSrc.startsWith('data:')) {
+            imageSrc = await this._imageToDataUrl(imageSrc);
+        }
 
         const templateVars = {
             title: title,
             question: targetInfo.question || targetInfo.mainText || '',
             imageSrc: imageSrc,
-            imgDisplay: imageSrc ? 'block' : 'none',
+            imgDisplay: imageSrc ? 'flex' : 'none',
             interactiveBody: interactiveBodyHtml,
             okText: targetInfo.okText ?? 'OK',
             textLabel: targetInfo.textLabel ?? 'MARKER',
@@ -166,7 +170,6 @@ export class ModelFactory {
                 ctx.font = '16px sans-serif';
                 ctx.textAlign = 'center';
                 
-                // Simple multiline text wrapping
                 const words = question.split(' ');
                 let line = '';
                 let y = 80;
@@ -224,7 +227,24 @@ export class ModelFactory {
         return group;
     }
 
-    // ─── private: HTML → THREE ─────────────────────────────────────────────────
+    // ─── private: Helpers ───────────────────────────────────────────────────
+
+    _imageToDataUrl(url) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.crossOrigin = 'Anonymous';
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                resolve(canvas.toDataURL('image/png'));
+            };
+            img.onerror = () => resolve('');
+            img.src = url;
+        });
+    }
 
     async _loadTemplate(url) {
         const res = await fetch(url);
@@ -278,7 +298,13 @@ export class ModelFactory {
     }
 
     _measurePanelCss(panelEl) {
+        const name = panelEl.getAttribute('name') || '';
         const root = panelEl.querySelector('.panel') || panelEl.firstElementChild;
+
+        if (name === 'okButton') {
+            return { cssW: 256, cssH: 96 };
+        }
+
         if (!root) return { cssW: 380, cssH: 450 };
 
         const style = root.getAttribute('style') || '';
@@ -288,10 +314,6 @@ export class ModelFactory {
         let cssW = wMatch ? parseFloat(wMatch[1]) : 380;
         let cssH = hMatch ? parseFloat(hMatch[1]) : 450;
 
-        if (name === 'okButton' || panelEl.getAttribute('name') === 'okButton') {
-            cssW = 256;
-            cssH = 96;
-        }
         return { cssW, cssH };
     }
 

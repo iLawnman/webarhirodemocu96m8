@@ -23,14 +23,21 @@
       text-transform: uppercase;
       letter-spacing: 1px;
     }
-    .question-img {
+    .question-img-wrap {
       width: 100%;
-      max-height: 140px;
-      object-fit: contain;
-      border-radius: 8px;
+      height: 140px;
       margin-bottom: 12px;
+      border-radius: 8px;
       background: rgba(255, 255, 255, 0.05);
       display: {{imgDisplay}};
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .question-img {
+      max-width: 100%;
+      max-height: 140px;
+      object-fit: contain;
     }
     .question-text {
       font-size: 14px;
@@ -121,7 +128,9 @@
   >
     <div class="panel question-panel-3d">
       <div class="question-header">{{title}}</div>
-      <img class="question-img" src="{{imageSrc}}" alt="marker preview" />
+      <div class="question-img-wrap">
+        <img class="question-img" src="{{imageSrc}}" alt="preview" />
+      </div>
       <div class="question-text">{{question}}</div>
       <div class="question-body">
         {{interactiveBody}}
