@@ -1,4 +1,4 @@
-/** Создание 3D-объектов: model (Mesh), panel/video/html (CSS2DObject + proxy plane) */
+/** Создание 3D-объектов: model (Mesh), panel/video/html (CSS3DObject + proxy plane (поворот сохраняется)) */
 
 import { normalizePath, applyTransformData, decodeHtmlB64 } from './utils.js';
 import {
@@ -12,8 +12,8 @@ import {
 
 const objLoader = new THREE.OBJLoader();
 
-/** Невидимый plane для raycast + CSS2DObject */
-function createCSS2DWrapper(width, height, domElement) {
+/** Невидимый plane для raycast + CSS3DObject */
+function createCSS3DWrapper(width, height, domElement) {
     const group = new THREE.Group();
 
     const geo = new THREE.PlaneGeometry(width, height);
@@ -27,15 +27,16 @@ function createCSS2DWrapper(width, height, domElement) {
     proxy.name = 'proxy';
     group.add(proxy);
 
-    const css2d = new THREE.CSS2DObject(domElement);
-    css2d.position.set(0, 0, 0);
+    const css3d = new THREE.CSS3DObject(domElement);
+    css3d.position.set(0, 0, 0);
+    // CSS3D: 1 unit ≈ 1 px при scale=1 → масштаб px→м: width_m / width_px
     const baseW = 300;
     const baseH = 180;
-    css2d.scale.set(width / (baseW / 1000), height / (baseH / 1000), 1);
-    group.add(css2d);
+    css3d.scale.set(width / baseW, height / baseH, width / baseW);
+    group.add(css3d);
 
     group.userData.proxy = proxy;
-    group.userData.css2dObject = css2d;
+    group.userData.css2dObject = css3d; // имя ключа сохранено для совместимости
     group.userData.domElement = domElement;
 
     return group;
@@ -98,7 +99,7 @@ export function createVideoMesh(data = {}) {
         label: data.label || 'Video'
     });
 
-    const group = createCSS2DWrapper(width, height, dom);
+    const group = createCSS3DWrapper(width, height, dom);
     group.name = data.name || 'video_' + Date.now().toString().slice(-4);
     group.userData = {
         type: 'video',
@@ -133,7 +134,7 @@ export function createHtmlMesh(data = {}, rawHtml = '') {
 
     const dom = buildHtmlDOM(html);
 
-    const group = createCSS2DWrapper(width, height, dom);
+    const group = createCSS3DWrapper(width, height, dom);
     group.name = data.name || 'html_' + Date.now().toString().slice(-4);
     group.userData = {
         type: 'html',
@@ -175,7 +176,7 @@ export function createPanelMesh(data = {}, innerHTML = '') {
     const panelData = parsePanelHTML(innerHTML);
     const dom = buildPanelDOM(panelData);
 
-    const group = createCSS2DWrapper(width, height, dom);
+    const group = createCSS3DWrapper(width, height, dom);
     group.name = data.name || 'panel_' + Date.now().toString().slice(-4);
     group.userData = {
         type: 'panel',
@@ -205,6 +206,6 @@ export function rebuildPlaneGeometry(mesh) {
     if (mesh.userData.css2dObject) {
         const baseW = 300;
         const baseH = 180;
-        mesh.userData.css2dObject.scale.set(w / (baseW / 1000), h / (baseH / 1000), 1);
+        mesh.userData.css2dObject.scale.set(w / baseW, h / baseH, w / baseW);
     }
 }

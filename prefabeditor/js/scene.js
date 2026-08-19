@@ -1,6 +1,6 @@
-/** 3D-сцена: инициализация, камера, контролы, выбор объектов + CSS2DRenderer */
+/** 3D-сцена: инициализация, камера, контролы, выбор объектов + CSS3DRenderer */
 
-export let scene, camera, renderer, css2dRenderer, orbitControls, transformControls;
+export let scene, camera, renderer, css3dRenderer, orbitControls, transformControls;
 export let selectedObject = null;
 export const editableObjects = [];
 
@@ -27,13 +27,13 @@ export function init3D() {
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
 
-    css2dRenderer = new THREE.CSS2DRenderer();
-    css2dRenderer.setSize(container.clientWidth, container.clientHeight);
-    css2dRenderer.domElement.style.position = 'absolute';
-    css2dRenderer.domElement.style.top = '0';
-    css2dRenderer.domElement.style.left = '0';
-    css2dRenderer.domElement.style.pointerEvents = 'none';
-    container.appendChild(css2dRenderer.domElement);
+    css3dRenderer = new THREE.CSS3DRenderer();
+    css3dRenderer.setSize(container.clientWidth, container.clientHeight);
+    css3dRenderer.domElement.style.position = 'absolute';
+    css3dRenderer.domElement.style.top = '0';
+    css3dRenderer.domElement.style.left = '0';
+    css3dRenderer.domElement.style.pointerEvents = 'none';
+    container.appendChild(css3dRenderer.domElement);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
@@ -95,7 +95,7 @@ function animate() {
     requestAnimationFrame(animate);
     orbitControls.update();
     renderer.render(scene, camera);
-    css2dRenderer.render(scene, camera);
+    css3dRenderer.render(scene, camera);
 }
 
 function onWindowResize() {
@@ -103,7 +103,7 @@ function onWindowResize() {
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
     renderer.setSize(container.clientWidth, container.clientHeight);
-    css2dRenderer.setSize(container.clientWidth, container.clientHeight);
+    css3dRenderer.setSize(container.clientWidth, container.clientHeight);
 }
 
 export function selectObject(obj) {
