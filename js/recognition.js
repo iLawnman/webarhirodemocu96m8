@@ -10,7 +10,7 @@ export class ImageRecognition {
     this.targetBitmaps = [];
     this.trackedMarkers = new Map();
     // waitingImage   — ждём распознавания маркера (показана панель "ИЩИТЕ!")
-    // waitingInput   — маркер найден, открыта questionpanel, ждём ответа пользователя
+    // waitingInput   — маркер найден, панель вопроса (часть AR-таргета) открыта, ждём ответа пользователя
     // showingResult  — ответ дан, показана resultpanel
     this.state = 'waitingImage';
 
@@ -146,7 +146,7 @@ export class ImageRecognition {
   }
 
   /**
-   * Загружает список картинок из манифеста, таблицы квестов и готовит ImageBitmap[] для XR Image Tracking.
+   * Загружает список картинок из манифеста, таблицу квестов и готовит ImageBitmap[] для XR Image Tracking.
    * При ошибке манифеста или загрузки — fallback на сгенерированный маркер.
    */
   async init() {
@@ -280,7 +280,8 @@ export class ImageRecognition {
 
   /**
    * Полный сброс состояния распознавания (используется при завершении AR-сессии):
-   * убирает все AR-цели со сцены, закрывает все overlay-панели.
+   * убирает все AR-цели со сцены (вместе с их встроенными CSS2D-панелями вопроса),
+   * закрывает overlay-панели (штора, "ИЩИТЕ!", результат).
    * @param {import('./arscene.js').ARScene} [arScene]
    */
   reset(arScene) {
@@ -294,7 +295,6 @@ export class ImageRecognition {
     this.state = 'waitingImage';
 
     this.ui.hideQuestStart();
-    this.ui.hideQuestion();
     this.ui.hideResult();
   }
 
@@ -320,6 +320,13 @@ export class ImageRecognition {
     this._tryHitOk();
   }
 
+  /**
+   * Раньше здесь искался raycast-совместимый okPanel (3D-меш) для типа ответа
+   * без выбора. Панель теперь HTML (CSS2DObject) и клики по её кнопкам
+   * обрабатываются нативно самим DOM — этот путь оставлен только как
+   * запасной "тап-где-угодно" шорткат (см. ниже), raycast-плоскости
+   * больше не создаются.
+   */
   _tryHitOk() {
     if (!this._arScene) return;
     const camera = this._arScene.camera;
@@ -351,11 +358,10 @@ export class ImageRecognition {
   }
 
   /**
-   * Тап по 3D OK-кнопке / по маркеру. Настоящий ответ на вопрос всегда даётся
-   * через 2D questionpanel (см. _openQuestionPanel/_onQuestionAnswered).
-   * Тап по 3D-объекту работает только как ярлык подтверждения для типов
-   * без выбора (Art/AntiArt/без совпадения в quest-таблице) — для Button/
-   * Slide/InputField он игнорируется, чтобы не подменять реальный ответ.
+   * Тап по маркеру вне HTML-панели (см. _tryHitOk). Работает только как
+   * ярлык подтверждения для типов без выбора (Art/AntiArt/без совпадения
+   * в quest-таблице) — для Button/Slide/InputField он игнорируется, чтобы
+   * не подменять реальный ответ, данный через кнопки самой панели.
    */
   _handleOk(entry) {
     if (entry.dismissed) return;
@@ -366,28 +372,9 @@ export class ImageRecognition {
   }
 
   /**
-   * Открывает 2D questionpanel с картинкой распознанного маркера и вопросом
-   * из questtable.json, подключает обработчик ответа.
-   */
-  _openQuestionPanel(entry, markerName) {
-    const questData = entry.questData;
-    const bitmapEntry = this.targetBitmaps.find(t => t.name === markerName);
-
-    const data = {
-      imageSrc: bitmapEntry ? bitmapEntry.src : '',
-      question: questData?.question || questData?.title || markerName,
-      mainText: questData?.mainText || '',
-      answerType: questData?.answerType || 'Slide',
-      options: questData?.options || []
-    };
-
-    this.ui.showQuestion(data, (value) => this._onQuestionAnswered(entry, value));
-  }
-
-  /**
-   * Пользователь дал ответ (через questionpanel или через тап-ярлык).
-   * Валидирует ответ, прячет AR-цель и questionpanel, показывает resultPanel
-   * с текстом из RightReaction/WrongReaction.
+   * Пользователь дал ответ (через кнопки HTML-панели, встроенной в AR-таргет,
+   * или через тап-ярлык). Валидирует ответ, прячет AR-цель (вместе с панелью)
+   * и показывает resultPanel с текстом из RightReaction/WrongReaction.
    */
   _onQuestionAnswered(entry, value) {
     if (entry.dismissed) return;
@@ -396,7 +383,6 @@ export class ImageRecognition {
     if (entry.arTarget) {
       entry.arTarget.visible = false;
     }
-    this.ui.hideQuestion();
 
     const questData = entry.questData;
     const questId = questData?.questId;
@@ -444,6 +430,7 @@ export class ImageRecognition {
           if (this.state !== 'waitingImage') continue;
 
           const markerName = this.getMarkerName(idx);
+          const bitmapEntry = this.targetBitmaps.find(t => t.name === markerName);
 
           // Поиск квеста по имени маркера (recognitionImage == markerName)
           const questData = this.questManager.getArTargetData(markerName);
@@ -457,21 +444,26 @@ export class ImageRecognition {
             this.ui.log(`[Quest] No quest match for marker "${markerName}". Using fallback data.`, 'warn');
           }
 
-          // Формируем объект данных для создания 3D панели ARTarget
+          // Формируем полные данные для 3D-таргета — включая содержимое
+          // панели вопроса (question/mainText/answerType/options/imageSrc).
+          // Отдельного вызова "открыть 2D-панель" больше нет: панель уже
+          // строится внутри createArTargetSync как часть таргета.
           const targetInfoData = {
             title: questData?.title || markerName,
-            subtitle: questData?.question || 'AR Target', // Вывод вопроса quest.question
-            textLabel: questData?.questId ? `QUEST ${questData.questId}` : 'MARKER',
-            imgLabel: 'IMAGE',
-            okText: 'OK',
-            questData: questData // Сохраняем полный контекст квеста
+            question: questData?.question || questData?.title || markerName,
+            mainText: questData?.mainText || '',
+            answerType: questData?.answerType || 'Slide',
+            options: questData?.options || [],
+            imageSrc: bitmapEntry ? bitmapEntry.src : '',
+            questId: questData?.questId,
+            questData
           };
 
           // Синхронный create — никаких Promise в frame loop
           const arTarget = createArTargetSync(targetInfoData, {
-            onOk: () => {
+            onAnswer: (value) => {
               const e = this.trackedMarkers.get(idx);
-              if (e) this._handleOk(e);
+              if (e) this._onQuestionAnswered(e, value);
             }
           });
 
@@ -488,9 +480,9 @@ export class ImageRecognition {
           this.ui.log('[' + idx + '] AR Target created for marker: ' + markerName + ' (state=' + trackingState + ')', 'ok');
           this.ui.log('state → waitingInput', 'info');
 
-          // Картинка найдена: прячем "ИЩИТЕ!", открываем панель вопроса
+          // Картинка найдена: прячем "ИЩИТЕ!"; панель вопроса уже видна как
+          // часть AR-таргета — открывать отдельно больше нечего.
           this.ui.hideQuestStart();
-          this._openQuestionPanel(entry, markerName);
 
           playSound("click");
         }
@@ -537,9 +529,8 @@ export class ImageRecognition {
           this.trackedMarkers.delete(idx);
 
           // Если ответ ещё не был дан (маркер потерян до завершения вопроса) —
-          // закрываем questionpanel и возвращаемся к поиску.
+          // таргет (и его панель) уже удалён выше, возвращаемся к поиску.
           if (!entry.dismissed) {
-            this.ui.hideQuestion();
             this.ui.log('state → waitingImage (lost before answer)', 'info');
             this.presentSearchPrompt('Маркер потерян. Покажите картинку снова.');
           }
