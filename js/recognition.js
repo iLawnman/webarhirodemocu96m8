@@ -1,563 +1,326 @@
 import * as THREE from 'three';
-import { createArTargetSync } from './artarget.js';
-import { playSound } from './audio.js';
-import { QuestManager } from './quests.js';
+import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 
-export class ImageRecognition {
-  constructor(ui) {
-    this.ui = ui;
-    /** @type {Array<{bmp: ImageBitmap, name: string, src: string, source: string}>} */
-    this.targetBitmaps = [];
-    this.trackedMarkers = new Map();
-    // waitingImage   — ждём распознавания маркера (показана панель "ИЩИТЕ!")
-    // waitingInput   — маркер найден, панель вопроса (часть AR-таргета) открыта, ждём ответа пользователя
-    // showingResult  — ответ дан, показана resultpanel
-    this.state = 'waitingImage';
+/**
+ * ModelFactory — строит AR-таргет: физический маркер (сфера в WebGL) +
+ * интерактивная HTML-панель вопроса (CSS3DObject), являющаяся частью
+ * того же THREE.Group и следующая за трекингом маркера с сохранением поворота.
+ */
+export class ModelFactory {
+  /**
+   * Синхронное создание AR-таргета с полноценной панелью вопроса.
+   * Никаких Promise — вызывается прямо в кадровом цикле (processTracking).
+   *
+   * @param {string|object} [targetData='']
+   * @param {object} [targetData.title]
+   * @param {object} [targetData.question]      Текст вопроса
+   * @param {object} [targetData.mainText]       Текст-заглушка для Slide без вариантов
+   * @param {'Slide'|'Button'|'InputField'|'Art'|'AntiArt'} [targetData.answerType]
+   * @param {Array}  [targetData.options]
+   * @param {string} [targetData.imageSrc]       Картинка распознанного маркера
+   * @param {object} [options]
+   * @param {Function|null} [options.onAnswer]   callback(value) — вызывается когда пользователь дал ответ
+   * @returns {THREE.Group}
+   */
+  createArTargetSync(targetData = '', options = {}) {
+    const { onAnswer = null } = options;
 
-    // Менеджер квестов для сопоставления RecognitionImage -> Quest
-    this.questManager = new QuestManager();
+    const targetInfo = typeof targetData === 'object' && targetData !== null
+        ? targetData
+        : { title: String(targetData) };
 
-    this._raycaster = new THREE.Raycaster();
-    this._pointerNdc = new THREE.Vector2(0, 0);
-    this._boundOnSelect = null;
-    this._boundOnClick = null;
-    this._arScene = null;
-    this._xrSession = null;
-  }
+    const title = targetInfo.title ?? targetInfo.name ?? String(targetData ?? '');
+    const questionText = targetInfo.question || targetInfo.mainText || 'Выберите действие для продолжения:';
+    const groupName = targetInfo.questId || targetInfo.id || title || 'target';
+    const answerType = targetInfo.answerType || 'Slide';
 
-  /** Путь к манифесту со списком маркеров */
-  static MANIFEST_URL = './assets/recognitionimages.json';
+    const group = new THREE.Group();
+    group.name = `arTarget_${groupName}`;
 
-  async makeGeneratedBitmap() {
-    this.ui.log('Generating fallback bitmap...', 'warn');
-    const c = document.createElement('canvas');
-    c.width = 512;
-    c.height = 512;
-    const ctx = c.getContext('2d');
-    ctx.fillStyle = '#f0f0f0';
-    ctx.fillRect(0, 0, 512, 512);
-    for (let i = 0; i < 6000; i++) {
-      ctx.fillStyle = Math.random() > 0.5 ? '#fff' : '#e0e0e0';
-      ctx.fillRect(Math.random() * 512, Math.random() * 512, 2, 2);
+    // 1. Физический 3D-маркер в WebGL (зелёная точка)
+    const sphere = this._createSphere();
+    group.add(sphere);
+
+    // 2. HTML-панель вопроса — часть таргета, не оверлей
+    const panelEl = document.createElement('div');
+    panelEl.className = 'ar-css3d-panel';
+    panelEl.style.cssText = `
+      width: 320px;
+      padding: 16px;
+      background: rgba(10, 10, 20, 0.92);
+      border: 2px solid #00ffaa;
+      border-radius: 16px;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      text-align: center;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+      pointer-events: auto;
+      user-select: none;
+      transform-style: preserve-3d;
+    `;
+
+    const titleEl = document.createElement('div');
+    titleEl.style.cssText = `
+      font-size: 18px;
+      font-weight: bold;
+      color: #00ffaa;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    `;
+    titleEl.textContent = title || 'ОТЛАДКА AR';
+    panelEl.appendChild(titleEl);
+
+    if (targetInfo.imageSrc) {
+      const imgEl = document.createElement('img');
+      imgEl.src = targetInfo.imageSrc;
+      imgEl.style.cssText = `
+        width: 100%;
+        max-height: 140px;
+        object-fit: cover;
+        border-radius: 10px;
+        border: 1px solid #00ffaa55;
+        margin-bottom: 10px;
+        display: block;
+      `;
+      panelEl.appendChild(imgEl);
     }
-    for (let i = 0; i < 40; i++) {
-      ctx.fillStyle = `hsl(${Math.random() * 360},70%,50%)`;
-      ctx.beginPath();
-      ctx.arc(Math.random() * 512, Math.random() * 512, Math.random() * 25 + 10, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    ctx.strokeStyle = '#333';
-    ctx.lineWidth = 4;
-    for (let i = 0; i < 20; i++) {
-      ctx.beginPath();
-      ctx.moveTo(Math.random() * 512, Math.random() * 512);
-      ctx.lineTo(Math.random() * 512, Math.random() * 512);
-      ctx.stroke();
-    }
-    const blob = await new Promise(res => c.toBlob(res, 'image/png'));
-    const bmp = await createImageBitmap(blob);
-    this.ui.log('Fallback bitmap 512x512 ready', 'ok');
-    return bmp;
+
+    const questionEl = document.createElement('div');
+    questionEl.style.cssText = `
+      font-size: 14px;
+      color: #f8fafc;
+      line-height: 1.4;
+      margin-bottom: 4px;
+    `;
+    questionEl.textContent = questionText;
+    panelEl.appendChild(questionEl);
+
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'ar-quest-body';
+    panelEl.appendChild(bodyEl);
+
+    const handleAnswer = (value) => {
+      if (typeof onAnswer === 'function') onAnswer(value);
+    };
+
+    this._buildQuestionBody(bodyEl, { ...targetInfo, answerType }, handleAnswer);
+
+    // 3. CSS3DObject — панель в реальном 3D, сохраняет rotation группы
+    // scale 0.001: 320 CSS-px ≈ 0.32 м в мире
+    const cssObject = new CSS3DObject(panelEl);
+    cssObject.scale.set(0.001, 0.001, 0.001);
+    cssObject.position.set(0, 0.15, 0); // над маркером
+    group.add(cssObject);
+
+    group.userData = { targetInfo, sphere, cssObject, panelEl, onAnswer, answerType };
+    return group;
   }
 
   /**
-   * Загружает манифест recognitionimages.json.
-   * Поддерживаемые форматы:
-   *   ["T1.jpg", "T2.jpg"]
-   *   [{ "name": "T1", "src": "T1.jpg" }, ...]
-   *   { "images": [ ... ] }
-   * Пути без префикса считаются относительно ./assets/
+   * Строит интерактивное тело панели в зависимости от answerType.
    */
-  async loadImageList() {
-    const url = ImageRecognition.MANIFEST_URL;
-    this.ui.log('Loading image list from: ' + url, 'info');
-    try {
-      const res = await fetch(url);
-      this.ui.log('Manifest fetch: ' + res.status + ' ' + res.statusText, res.ok ? 'ok' : 'warn');
-      if (!res.ok) throw new Error('HTTP ' + res.status);
+  _buildQuestionBody(bodyEl, data, onAnswer) {
+    bodyEl.innerHTML = '';
 
-      const data = await res.json();
-      let items = Array.isArray(data) ? data : (data.images || data.markers || []);
-      if (!Array.isArray(items) || items.length === 0) {
-        throw new Error('Empty or invalid image list');
-      }
+    const type = data.answerType || 'Slide';
+    const options = data.options || [];
 
-      return items.map((item, i) => {
-        if (typeof item === 'string') {
-          const name = item.replace(/\.[^.]+$/, '') || ('T' + (i + 1));
-          const src = item.startsWith('./') || item.startsWith('/') || item.startsWith('http')
-              ? item
-              : './assets/' + item;
-          return { name, src };
-        }
-        const name = item.name || item.id || ('T' + (i + 1));
-        let src = item.src || item.url || item.path || item.file;
-        if (!src) throw new Error('Item #' + i + ' has no src');
-        if (!src.startsWith('./') && !src.startsWith('/') && !src.startsWith('http')) {
-          src = './assets/' + src;
-        }
-        return { name, src };
+    if (type === 'Button') {
+      const grid = document.createElement('div');
+      grid.className = 'ar-quest-options-grid';
+      grid.style.cssText = `display:flex; flex-direction:column; gap:8px; margin-top:12px;`;
+
+      options.forEach((opt, idx) => {
+        const btn = document.createElement('button');
+        btn.className = 'ar-quest-btn';
+        btn.textContent = opt.text || `Вариант ${idx + 1}`;
+        btn.style.cssText = `
+          width: 100%;
+          padding: 12px;
+          background: #ffaa00;
+          color: #000000;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: bold;
+          cursor: pointer;
+        `;
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          onAnswer(idx + 1);
+        });
+        grid.appendChild(btn);
       });
-    } catch (e) {
-      this.ui.log('Manifest load failed: ' + e.message, 'err');
-      return null;
-    }
-  }
 
-  async loadTargetImage(src) {
-    this.ui.log('Loading target from: ' + src, 'info');
-    try {
-      this.ui.log('Trying fetch...', 'info');
-      const res = await fetch(src);
-      this.ui.log('Fetch status: ' + res.status + ' ' + res.statusText, res.ok ? 'ok' : 'warn');
-      if (res.ok) {
-        const blob = await res.blob();
-        this.ui.log('Blob: size=' + blob.size + ' type=' + blob.type, 'info');
-        const bmp = await createImageBitmap(blob);
-        this.ui.log('Bitmap from fetch: ' + bmp.width + 'x' + bmp.height, 'ok');
-        return { bmp, source: 'fetch' };
-      }
-    } catch (e) {
-      this.ui.log('Fetch failed: ' + e.message, 'err');
-    }
+      bodyEl.appendChild(grid);
 
-    this.ui.log('Trying Image() loader...', 'warn');
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      img.onload = () => {
-        this.ui.log('Image loaded: ' + img.width + 'x' + img.height, 'ok');
-        const c = document.createElement('canvas');
-        c.width = img.width;
-        c.height = img.height;
-        c.getContext('2d').drawImage(img, 0, 0);
-        c.toBlob(async (blob) => {
-          const bmp = await createImageBitmap(blob);
-          this.ui.log('Bitmap from Image(): ' + bmp.width + 'x' + bmp.height, 'ok');
-          resolve({ bmp, source: 'image' });
-        }, 'image/png');
+    } else if (type === 'InputField') {
+      const wrap = document.createElement('div');
+      wrap.className = 'ar-quest-input-block';
+      wrap.style.cssText = `display:flex; gap:8px; margin-top:12px;`;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'ar-quest-input';
+      input.placeholder = 'Введите ответ...';
+      input.style.cssText = `
+        flex: 1;
+        min-width: 0;
+        padding: 10px;
+        border-radius: 8px;
+        border: 1px solid #00ffaa;
+        background: #0a0a14;
+        color: #ffffff;
+        font-size: 14px;
+      `;
+      input.addEventListener('click', (e) => e.stopPropagation());
+      input.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter') onAnswer(input.value);
+      });
+
+      const submitBtn = document.createElement('button');
+      submitBtn.className = 'ar-quest-submit-btn';
+      submitBtn.textContent = 'OK';
+      submitBtn.style.cssText = `
+        padding: 10px 16px;
+        background: #00cc66;
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+      `;
+      submitBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onAnswer(input.value);
+      });
+
+      wrap.appendChild(input);
+      wrap.appendChild(submitBtn);
+      bodyEl.appendChild(wrap);
+
+    } else if (type === 'Art' || type === 'AntiArt') {
+      const btn = document.createElement('button');
+      btn.className = 'ar-quest-submit-btn ar-quest-ok-btn';
+      btn.textContent = 'OK';
+      btn.style.cssText = `
+        width: 100%;
+        margin-top: 12px;
+        padding: 10px;
+        background: #00cc66;
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+      `;
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onAnswer(true);
+      });
+      bodyEl.appendChild(btn);
+
+    } else {
+      // Slide (по умолчанию)
+      let idx = 0;
+      const total = Math.max(options.length, 1);
+
+      const slider = document.createElement('div');
+      slider.className = 'ar-quest-slider';
+      slider.style.cssText = `display:flex; align-items:center; gap:8px; margin-top:12px;`;
+
+      const navBtnStyle = `
+        flex: 0 0 auto;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 1px solid #00ffaa;
+        background: transparent;
+        color: #00ffaa;
+        font-size: 16px;
+        cursor: pointer;
+      `;
+
+      const prev = document.createElement('button');
+      prev.className = 'ar-slide-nav prev';
+      prev.textContent = '◄';
+      prev.style.cssText = navBtnStyle;
+
+      const slideContent = document.createElement('div');
+      slideContent.className = 'ar-slide-content';
+      slideContent.style.cssText = `flex: 1; min-width: 0; font-size: 13px; color: #f8fafc; line-height: 1.4;`;
+      slideContent.textContent = options[0]?.text || data.mainText || '';
+
+      const next = document.createElement('button');
+      next.className = 'ar-slide-nav next';
+      next.textContent = '►';
+      next.style.cssText = navBtnStyle;
+
+      const update = () => {
+        slideContent.textContent = options[idx]?.text || data.mainText || '';
       };
-      img.onerror = () => {
-        this.ui.log('Image() failed', 'err');
-        resolve(null);
-      };
-      img.src = src;
+
+      prev.addEventListener('click', (e) => {
+        e.stopPropagation();
+        idx = (idx - 1 + total) % total;
+        update();
+      });
+      next.addEventListener('click', (e) => {
+        e.stopPropagation();
+        idx = (idx + 1) % total;
+        update();
+      });
+
+      slider.appendChild(prev);
+      slider.appendChild(slideContent);
+      slider.appendChild(next);
+      bodyEl.appendChild(slider);
+
+      const okBtn = document.createElement('button');
+      okBtn.className = 'ar-quest-submit-btn ar-quest-ok-btn';
+      okBtn.textContent = 'OK';
+      okBtn.style.cssText = `
+        width: 100%;
+        margin-top: 10px;
+        padding: 10px;
+        background: #00cc66;
+        color: #ffffff;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: bold;
+        cursor: pointer;
+      `;
+      okBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        onAnswer(idx + 1);
+      });
+      bodyEl.appendChild(okBtn);
+    }
+  }
+
+  _createSphere() {
+    const geo = new THREE.SphereGeometry(0.015, 24, 24);
+    const mat = new THREE.MeshStandardMaterial({
+      color: 0x00ffaa,
+      emissive: 0x00ffaa,
+      emissiveIntensity: 0.5
     });
+    return new THREE.Mesh(geo, mat);
   }
+}
 
-  /**
-   * Загружает список картинок из манифеста, таблицу квестов и готовит ImageBitmap[] для XR Image Tracking.
-   * При ошибке манифеста или загрузки — fallback на сгенерированный маркер.
-   */
-  async init() {
-    this.state = 'waitingImage';
-    this.targetBitmaps = [];
+const defaultFactory = new ModelFactory();
 
-    // Загрузка таблиц квестов и ответов
-    this.ui.log('Loading quest table & answers...', 'info');
-    await this.questManager.loadData();
-    if (this.questManager.isLoaded) {
-      this.ui.log(`Quest data loaded: ${this.questManager.quests.size} quests, ${this.questManager.answers.size} answers`, 'ok');
-    } else {
-      this.ui.log('Failed to load quest data, falling back to default marker info', 'warn');
-    }
+/** Синхронное создание AR-таргета (используется в кадровом цикле). */
+export function createArTargetSync(targetData, options = {}) {
+  return defaultFactory.createArTargetSync(targetData, options);
+}
 
-    const list = await this.loadImageList();
-
-    if (list && list.length) {
-      this.ui.log('Found ' + list.length + ' image(s) in manifest', 'info');
-      for (const item of list) {
-        const result = await this.loadTargetImage(item.src);
-        if (result && result.bmp) {
-          this.targetBitmaps.push({
-            bmp: result.bmp,
-            name: item.name,
-            src: item.src,
-            source: result.source
-          });
-          this.ui.log('Ready: ' + item.name + ' via ' + result.source, 'ok');
-        } else {
-          this.ui.log('Skip failed: ' + item.src, 'err');
-        }
-      }
-    }
-
-    if (this.targetBitmaps.length === 0) {
-      this.ui.log('No images loaded, using generated fallback', 'err');
-      const bmp = await this.makeGeneratedBitmap();
-      this.targetBitmaps.push({ bmp, name: 'T1', src: '(generated)', source: 'generated' });
-
-      const c = document.createElement('canvas');
-      c.width = 128;
-      c.height = 128;
-      const ctx = c.getContext('2d');
-      ctx.fillStyle = '#f0f0f0';
-      ctx.fillRect(0, 0, 128, 128);
-      ctx.fillStyle = '#ff0055';
-      ctx.fillRect(32, 32, 64, 64);
-      // this.ui.setPreview(c.toDataURL());
-    } else {
-      // this.ui.setPreview(this.targetBitmaps[0].src);
-    }
-
-    const names = this.targetBitmaps.map(t => t.name).join(', ');
-    this.ui.enableArButton();
-    this.ui.log('state → waitingImage | markers: ' + names, 'info');
-  }
-
-  /** Массив ImageBitmap (сырой). */
-  getBitmaps() {
-    return this.targetBitmaps.map(t => t.bmp);
-  }
-
-  /**
-   * Готовый массив для XRSessionInit.trackedImages.
-   * Использование:
-   *   trackedImages: recognition.getTrackedImages(0.2)
-   */
-  getTrackedImages(widthInMeters = 0.2) {
-    return this.targetBitmaps
-        .filter(t => t && t.bmp)
-        .map(t => ({
-          image: t.bmp,
-          widthInMeters
-        }));
-  }
-
-  /** Имя маркера по индексу из getImageTrackingResults(). */
-  getMarkerName(idx) {
-    const entry = this.targetBitmaps[idx];
-    return entry ? entry.name : ('T' + (idx + 1));
-  }
-
-  /** Обратная совместимость (первый битмап). */
-  get targetBitmap() {
-    return this.targetBitmaps[0]?.bmp ?? null;
-  }
-
-  attachInput(xrSession, arScene) {
-    this._xrSession = xrSession;
-    this._arScene = arScene;
-
-    this._boundOnSelect = (ev) => this._onSelect(ev);
-    xrSession.addEventListener('select', this._boundOnSelect);
-
-    this._boundOnClick = (ev) => this._onCanvasTap(ev);
-    arScene.renderer.domElement.addEventListener('click', this._boundOnClick);
-    arScene.renderer.domElement.addEventListener('touchend', this._boundOnClick, { passive: true });
-  }
-
-  detachInput() {
-    if (this._xrSession && this._boundOnSelect) {
-      this._xrSession.removeEventListener('select', this._boundOnSelect);
-    }
-    if (this._arScene && this._boundOnClick) {
-      this._arScene.renderer.domElement.removeEventListener('click', this._boundOnClick);
-      this._arScene.renderer.domElement.removeEventListener('touchend', this._boundOnClick);
-    }
-    this._xrSession = null;
-    this._arScene = null;
-    this._boundOnSelect = null;
-    this._boundOnClick = null;
-  }
-
-  /**
-   * Показывает панель "ИЩИТЕ!" со случайной картинкой из списка распознаваемых
-   * маркеров. Вызывается когда пол установлен (сессия готова) и когда
-   * пользователь возвращается в режим поиска (маркер потерян / ответ дан).
-   * @param {string} [hintText]
-   */
-  presentSearchPrompt(hintText) {
-    this.state = 'waitingImage';
-    if (!this.targetBitmaps.length) return;
-
-    const pick = this.targetBitmaps[Math.floor(Math.random() * this.targetBitmaps.length)];
-    this.ui.showQuestStart(pick.src, 'ИЩИТЕ!');
-
-    // const names = this.targetBitmaps.map(t => t.name).join(', ');
-    // this.ui.setHint(hintText || ('Покажите одну из картинок: ' + names));
-  }
-
-  /**
-   * Полный сброс состояния распознавания (используется при завершении AR-сессии):
-   * убирает все AR-цели со сцены (вместе с их встроенными CSS2D-панелями вопроса),
-   * закрывает overlay-панели (штора, "ИЩИТЕ!", результат).
-   * @param {import('./arscene.js').ARScene} [arScene]
-   */
-  reset(arScene) {
-    for (const [, entry] of this.trackedMarkers) {
-      if (entry.arTarget) {
-        if (arScene) arScene.scene.remove(entry.arTarget);
-        this._disposeTarget(entry.arTarget);
-      }
-    }
-    this.trackedMarkers.clear();
-    this.state = 'waitingImage';
-
-    this.ui.hideQuestStart();
-    this.ui.hideResult();
-  }
-
-  _onSelect(ev) {
-    if (this.state !== 'waitingInput' || !this._arScene) return;
-    this._pointerNdc.set(0, 0);
-    this._tryHitOk();
-  }
-
-  _onCanvasTap(ev) {
-    if (this.state !== 'waitingInput' || !this._arScene) return;
-    const rect = this._arScene.renderer.domElement.getBoundingClientRect();
-    let clientX, clientY;
-    if (ev.changedTouches && ev.changedTouches.length) {
-      clientX = ev.changedTouches[0].clientX;
-      clientY = ev.changedTouches[0].clientY;
-    } else {
-      clientX = ev.clientX;
-      clientY = ev.clientY;
-    }
-    this._pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this._pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    this._tryHitOk();
-  }
-
-  /**
-   * Раньше здесь искался raycast-совместимый okPanel (3D-меш) для типа ответа
-   * без выбора. Панель теперь HTML (CSS2DObject) и клики по её кнопкам
-   * обрабатываются нативно самим DOM — этот путь оставлен только как
-   * запасной "тап-где-угодно" шорткат (см. ниже), raycast-плоскости
-   * больше не создаются.
-   */
-  _tryHitOk() {
-    if (!this._arScene) return;
-    const camera = this._arScene.camera;
-    if (!camera) return;
-    this._raycaster.setFromCamera(this._pointerNdc, camera);
-
-    for (const [, entry] of this.trackedMarkers) {
-      if (!entry.arTarget || !entry.arTarget.visible || entry.dismissed) continue;
-      const ud = entry.arTarget.userData || {};
-      const okPanel = ud.okPanel || ud.okButton
-          || (ud.panels && (ud.panels.okPanel || ud.panels.okButton));
-      if (!okPanel) continue;
-      const hits = this._raycaster.intersectObject(okPanel, false);
-      if (hits.length > 0) {
-        this._handleOk(entry);
-        return;
-      }
-    }
-
-    // mobile UX: one visible target → any tap = OK
-    if (this.state === 'waitingInput') {
-      for (const [, entry] of this.trackedMarkers) {
-        if (entry.arTarget && entry.arTarget.visible && !entry.dismissed) {
-          this._handleOk(entry);
-          return;
-        }
-      }
-    }
-  }
-
-  /**
-   * Тап по маркеру вне HTML-панели (см. _tryHitOk). Работает только как
-   * ярлык подтверждения для типов без выбора (Art/AntiArt/без совпадения
-   * в quest-таблице) — для Button/Slide/InputField он игнорируется, чтобы
-   * не подменять реальный ответ, данный через кнопки самой панели.
-   */
-  _handleOk(entry) {
-    if (entry.dismissed) return;
-    const type = entry.questData?.answerType;
-    if (type === 'Art' || type === 'AntiArt' || !type) {
-      this._onQuestionAnswered(entry, true);
-    }
-  }
-
-  /**
-   * Пользователь дал ответ (через кнопки HTML-панели, встроенной в AR-таргет,
-   * или через тап-ярлык). Валидирует ответ, прячет AR-цель (вместе с панелью)
-   * и показывает resultPanel с текстом из RightReaction/WrongReaction.
-   */
-  _onQuestionAnswered(entry, value) {
-    if (entry.dismissed) return;
-    entry.dismissed = true;
-
-    if (entry.arTarget) {
-      entry.arTarget.visible = false;
-    }
-
-    const questData = entry.questData;
-    const questId = questData?.questId;
-
-    let isCorrect = true;
-    if (questId && this.questManager.quests.has(questId)) {
-      isCorrect = this.questManager.validateAnswer(questId, value);
-    }
-
-    this.state = 'showingResult';
-    this.ui.log(
-        `[Quest ${questId || '?'}] answer=${JSON.stringify(value)} → ${isCorrect ? 'CORRECT' : 'WRONG'}`,
-        isCorrect ? 'ok' : 'warn'
-    );
-
-    const reactionText = this.questManager.getReactionText(questId, isCorrect);
-
-    this.ui.showResult(isCorrect, reactionText, () => {
-      this.presentSearchPrompt();
-    });
-  }
-
-  processTracking(frame, xrRefSpace, frameCount, arScene) {
-    try {
-      if (!frame || typeof frame.getImageTrackingResults !== 'function') return;
-
-      const results = frame.getImageTrackingResults();
-      if (!results) return;
-
-      const seen = new Set();
-
-      for (const result of results) {
-        if (!result) continue;
-
-        const trackingState = result.trackingState;
-        const idx = result.index;
-        seen.add(idx);
-
-        const pose = frame.getPose(result.imageSpace, xrRefSpace);
-        if (!pose || !pose.transform) continue;
-
-        let entry = this.trackedMarkers.get(idx);
-
-        if (!entry) {
-          if (this.state !== 'waitingImage') continue;
-
-          const markerName = this.getMarkerName(idx);
-          const bitmapEntry = this.targetBitmaps.find(t => t.name === markerName);
-
-          // Поиск квеста по имени маркера (recognitionImage == markerName)
-          const questData = this.questManager.getArTargetData(markerName);
-
-          if (questData && questData.questId) {
-            this.ui.log(`[Quest] Matched marker "${markerName}" to Quest ID "${questData.questId}"`, 'ok');
-            if (questData.question) {
-              this.ui.log(`[Quest] Question: "${questData.question}"`, 'info');
-            }
-          } else {
-            this.ui.log(`[Quest] No quest match for marker "${markerName}". Using fallback data.`, 'warn');
-          }
-
-          // Формируем полные данные для 3D-таргета — включая содержимое
-          // панели вопроса (question/mainText/answerType/options/imageSrc).
-          // Отдельного вызова "открыть 2D-панель" больше нет: панель уже
-          // строится внутри createArTargetSync как часть таргета.
-          const targetInfoData = {
-            title: questData?.title || markerName,
-            question: questData?.question || questData?.title || markerName,
-            mainText: questData?.mainText || '',
-            answerType: questData?.answerType || 'Slide',
-            options: questData?.options || [],
-            imageSrc: bitmapEntry ? bitmapEntry.src : '',
-            questId: questData?.questId,
-            questData
-          };
-
-          // Синхронный create — никаких Promise в frame loop
-          const arTarget = createArTargetSync(targetInfoData, {
-            onAnswer: (value) => {
-              const e = this.trackedMarkers.get(idx);
-              if (e) this._onQuestionAnswered(e, value);
-            }
-          });
-
-          if (!arTarget || !arTarget.isObject3D) {
-            this.ui.log('[' + idx + '] createArTargetSync returned invalid object', 'err');
-            continue;
-          }
-
-          arScene.scene.add(arTarget);
-          entry = { arTarget, lastState: trackingState, dismissed: false, questData };
-          this.trackedMarkers.set(idx, entry);
-
-          this.state = 'waitingInput';
-          this.ui.log('[' + idx + '] AR Target created for marker: ' + markerName + ' (state=' + trackingState + ')', 'ok');
-          this.ui.log('state → waitingInput', 'info');
-
-          // Картинка найдена: прячем "ИЩИТЕ!"; панель вопроса уже видна как
-          // часть AR-таргета — открывать отдельно больше нечего.
-          this.ui.hideQuestStart();
-
-          playSound("click");
-        }
-
-        if (entry.dismissed) {
-          entry.lastState = trackingState;
-          continue;
-        }
-
-        const target = entry.arTarget;
-        if (!target || !target.isObject3D) continue;
-
-        const t = pose.transform;
-        const pos = t.position;
-        const ori = t.orientation;
-
-        if (target.position && pos &&
-            Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z)) {
-          target.position.set(pos.x, pos.y, pos.z);
-        }
-
-        if (target.quaternion && ori &&
-            Number.isFinite(ori.x) && Number.isFinite(ori.y) &&
-            Number.isFinite(ori.z) && Number.isFinite(ori.w)) {
-          target.quaternion.set(ori.x, ori.y, ori.z, ori.w);
-        }
-
-        entry.lastState = trackingState;
-
-        if (target.scale) {
-          target.scale.setScalar(trackingState === 'emulated' ? 0.7 : 1.0);
-        }
-      }
-
-      for (const [idx, entry] of this.trackedMarkers) {
-        if (!seen.has(idx) && entry.lastState !== 'lost') {
-          entry.lastState = 'lost';
-          this.ui.log('[' + idx + '] Tracking lost', 'warn');
-
-          if (entry.arTarget) {
-            arScene.scene.remove(entry.arTarget);
-            this._disposeTarget(entry.arTarget);
-          }
-          this.trackedMarkers.delete(idx);
-
-          // Если ответ ещё не был дан (маркер потерян до завершения вопроса) —
-          // таргет (и его панель) уже удалён выше, возвращаемся к поиску.
-          if (!entry.dismissed) {
-            this.ui.log('state → waitingImage (lost before answer)', 'info');
-            this.presentSearchPrompt('Маркер потерян. Покажите картинку снова.');
-          }
-        }
-      }
-    } catch (e) {
-      if (frameCount % 60 === 0) {
-        this.ui.log('getImageTrackingResults err: ' + (e && e.message ? e.message : String(e)), 'err');
-      }
-    }
-  }
-
-  _disposeTarget(group) {
-    if (!group) return;
-    group.traverse((obj) => {
-      if (obj.geometry) obj.geometry.dispose();
-      if (obj.material) {
-        if (Array.isArray(obj.material)) {
-          obj.material.forEach(m => {
-            if (m.map) m.map.dispose();
-            m.dispose();
-          });
-        } else {
-          if (obj.material.map) obj.material.map.dispose();
-          obj.material.dispose();
-        }
-      }
-    });
-  }
+/** Асинхронная обёртка сохранена для обратной совместимости. */
+export async function createArTarget(targetData, options = {}) {
+  return defaultFactory.createArTargetSync(targetData, options);
 }

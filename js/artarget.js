@@ -1,10 +1,10 @@
 import * as THREE from 'three';
-import { CSS2DObject } from 'three/addons/renderers/CSS2DRenderer.js';
+import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 
 /**
  * ModelFactory — строит AR-таргет: физический маркер (сфера в WebGL) +
- * интерактивная HTML-панель вопроса (CSS2DObject), являющаяся частью
- * того же THREE.Group и следующая за трекингом маркера.
+ * интерактивная HTML-панель вопроса (CSS3DObject), являющаяся частью
+ * того же THREE.Group и следующая за трекингом маркера с сохранением поворота.
  */
 export class ModelFactory {
     /**
@@ -37,13 +37,13 @@ export class ModelFactory {
         const group = new THREE.Group();
         group.name = `arTarget_${groupName}`;
 
-        // 1. Физический 3D-маркер в WebGL (зеленая точка)
+        // 1. Физический 3D-маркер в WebGL (зелёная точка)
         const sphere = this._createSphere();
         group.add(sphere);
 
         // 2. HTML-панель вопроса — часть таргета, не оверлей
         const panelEl = document.createElement('div');
-        panelEl.className = 'ar-css2d-panel';
+        panelEl.className = 'ar-css3d-panel';
         panelEl.style.cssText = `
       width: 320px;
       padding: 16px;
@@ -56,6 +56,7 @@ export class ModelFactory {
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
       pointer-events: auto;
       user-select: none;
+      transform-style: preserve-3d;
     `;
 
         const titleEl = document.createElement('div');
@@ -104,10 +105,11 @@ export class ModelFactory {
 
         this._buildQuestionBody(bodyEl, { ...targetInfo, answerType }, handleAnswer);
 
-        // 3. Оборачиваем DOM-элемент в CSS2DObject и добавляем в тот же Group,
-        // что и физический маркер — панель теперь следует за трекингом вместе с ним.
-        const cssObject = new CSS2DObject(panelEl);
-        cssObject.position.set(0, 0.15, 0); // Позиция над маркером
+        // 3. CSS3DObject — панель в реальном 3D, сохраняет rotation группы
+        // scale 0.001: 320 CSS-px ≈ 0.32 м в мире
+        const cssObject = new CSS3DObject(panelEl);
+        cssObject.scale.set(0.001, 0.001, 0.001);
+        cssObject.position.set(0, 0.15, 0); // над маркером
         group.add(cssObject);
 
         group.userData = { targetInfo, sphere, cssObject, panelEl, onAnswer, answerType };
@@ -116,8 +118,6 @@ export class ModelFactory {
 
     /**
      * Строит интерактивное тело панели в зависимости от answerType.
-     * Логика зеркалит ui.js#_renderQuestionBody, но рендерится в реальный DOM
-     * внутри CSS2DObject, а не в фиксированный оверлей.
      */
     _buildQuestionBody(bodyEl, data, onAnswer) {
         bodyEl.innerHTML = '';

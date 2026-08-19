@@ -1,6 +1,6 @@
 // js/arscene.js
 import * as THREE from 'three';
-import { CSS2DRenderer } from 'three/addons/renderers/CSS2DRenderer.js';
+import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js';
 
 export class ARScene {
   constructor(ui) {
@@ -21,16 +21,14 @@ export class ARScene {
 
     document.body.appendChild(this.renderer.domElement);
 
-    // CSS2D-рендерер: рисует HTML-панели (вопросы квестов), которые являются
-    // частью AR-таргетов (CSS2DObject внутри THREE.Group маркера) и следуют
-    // за трекингом вместе с остальной 3D-сценой.
-    this.cssRenderer = new CSS2DRenderer();
+    // CSS3D-рендерер: HTML-панели в реальном 3D-пространстве
+    // (сохраняют rotation маркера, не billboard к камере)
+    this.cssRenderer = new CSS3DRenderer();
     this.cssRenderer.setSize(window.innerWidth, window.innerHeight);
     this.cssRenderer.domElement.style.position = 'absolute';
     this.cssRenderer.domElement.style.top = '0px';
     this.cssRenderer.domElement.style.left = '0px';
-    // Пропускаем клики на WebGL-канвас везде, кроме самих HTML-панелей
-    // (у них pointer-events: auto выставляется точечно на самом элементе панели).
+    // Клики проходят на WebGL, кроме элементов с pointer-events: auto
     this.cssRenderer.domElement.style.pointerEvents = 'none';
     this.cssRenderer.domElement.style.zIndex = '10';
     document.body.appendChild(this.cssRenderer.domElement);
@@ -84,8 +82,7 @@ export class ARScene {
 
   render() {
     this.renderer.render(this.scene, this.camera);
-    // Рендерим CSS2D-слой той же (уже синхронизированной с XR-позой) камерой,
-    // которую только что обновил this.renderer.render() выше.
+    // CSS3D-слой той же XR-камерой (уже обновлённой renderer.render)
     this.cssRenderer.render(this.scene, this.camera);
   }
 }
