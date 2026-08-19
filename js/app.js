@@ -65,7 +65,7 @@ export class App {
 
     const sessionInit = {
       requiredFeatures: ['local-floor'],
-      optionalFeatures: ['image-tracking', 'dom-overlay'],
+      optionalFeatures: ['image-tracking', 'dom-overlay', 'anchors'],
       trackedImages,
       domOverlay: { root: document.body }
     };
@@ -73,7 +73,7 @@ export class App {
     try {
       this.xrSession = await navigator.xr.requestSession('immersive-ar', sessionInit);
     } catch (e) {
-      this.ui.log('Session with dom-overlay failed, retrying without it...', 'warn');
+      this.ui.log('Session with dom-overlay/anchors failed, retrying without them...', 'warn');
       try {
         this.xrSession = await navigator.xr.requestSession('immersive-ar', {
           requiredFeatures: ['local-floor'],

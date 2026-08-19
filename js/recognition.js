@@ -23,10 +23,17 @@ export class ImageRecognition {
     this._boundOnClick = null;
     this._arScene = null;
     this._xrSession = null;
+
+    // временные объекты для сглаживания (без аллокаций каждый кадр)
+    this._tmpPos = new THREE.Vector3();
+    this._tmpQuat = new THREE.Quaternion();
   }
 
   /** Путь к манифесту со списком маркеров */
   static MANIFEST_URL = './assets/recognitionimages.json';
+
+  /** Коэффициент сглаживания, если XRAnchor недоступен (0 = жёстко, 1 = мгновенно) */
+  static SMOOTH_FACTOR = 0.25;
 
   async makeGeneratedBitmap() {
     this.ui.log('Generating fallback bitmap...', 'warn');
@@ -274,7 +281,7 @@ export class ImageRecognition {
     for (const [, entry] of this.trackedMarkers) {
       if (entry.arTarget) {
         if (arScene) arScene.scene.remove(entry.arTarget);
-        this._disposeTarget(entry.arTarget);
+        this._disposeEntry(entry);
       }
     }
     this.trackedMarkers.clear();
@@ -437,8 +444,27 @@ export class ImageRecognition {
             continue;
           }
 
+          // сразу ставим в текущую позу (без скачка на первом кадре)
+          const t0 = pose.transform;
+          if (t0.position) {
+            arTarget.position.set(t0.position.x, t0.position.y, t0.position.z);
+          }
+          if (t0.orientation) {
+            arTarget.quaternion.set(
+                t0.orientation.x, t0.orientation.y,
+                t0.orientation.z, t0.orientation.w
+            );
+          }
+
           arScene.scene.add(arTarget);
-          entry = { arTarget, lastState: trackingState, dismissed: false, questData };
+          entry = {
+            arTarget,
+            lastState: trackingState,
+            dismissed: false,
+            questData,
+            anchor: null,
+            anchorCreating: false
+          };
           this.trackedMarkers.set(idx, entry);
 
           this.state = 'waitingInput';
@@ -457,19 +483,64 @@ export class ImageRecognition {
         const target = entry.arTarget;
         if (!target || !target.isObject3D) continue;
 
-        const t = pose.transform;
+        // --- Якорь: создаём один раз после первого стабильного pose ---
+        if (!entry.anchor && !entry.anchorCreating && typeof frame.createAnchor === 'function') {
+          entry.anchorCreating = true;
+          const createPromise = frame.createAnchor(pose.transform, xrRefSpace);
+          if (createPromise && typeof createPromise.then === 'function') {
+            createPromise
+                .then((anchor) => {
+                  if (entry && !entry.dismissed) {
+                    entry.anchor = anchor;
+                    this.ui.log('[' + idx + '] XRAnchor created', 'ok');
+                  } else if (anchor && typeof anchor.delete === 'function') {
+                    try { anchor.delete(); } catch (_) {}
+                  }
+                })
+                .catch((err) => {
+                  this.ui.log('[' + idx + '] createAnchor failed: ' + (err?.message || err), 'warn');
+                })
+                .finally(() => {
+                  if (entry) entry.anchorCreating = false;
+                });
+          } else {
+            entry.anchorCreating = false;
+          }
+        }
+
+        // --- Берём позу: приоритет у якоря, иначе image tracking ---
+        let usePose = pose;
+        if (entry.anchor && entry.anchor.anchorSpace) {
+          const anchorPose = frame.getPose(entry.anchor.anchorSpace, xrRefSpace);
+          if (anchorPose && anchorPose.transform) {
+            usePose = anchorPose;
+          }
+        }
+
+        const t = usePose.transform;
         const pos = t.position;
         const ori = t.orientation;
 
-        if (target.position && pos &&
-            Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z)) {
-          target.position.set(pos.x, pos.y, pos.z);
+        if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z)) {
+          this._tmpPos.set(pos.x, pos.y, pos.z);
+          if (entry.anchor) {
+            // якорь уже стабилен — ставим жёстко
+            target.position.copy(this._tmpPos);
+          } else {
+            // без якоря — сглаживание
+            target.position.lerp(this._tmpPos, ImageRecognition.SMOOTH_FACTOR);
+          }
         }
 
-        if (target.quaternion && ori &&
+        if (ori &&
             Number.isFinite(ori.x) && Number.isFinite(ori.y) &&
             Number.isFinite(ori.z) && Number.isFinite(ori.w)) {
-          target.quaternion.set(ori.x, ori.y, ori.z, ori.w);
+          this._tmpQuat.set(ori.x, ori.y, ori.z, ori.w);
+          if (entry.anchor) {
+            target.quaternion.copy(this._tmpQuat);
+          } else {
+            target.quaternion.slerp(this._tmpQuat, ImageRecognition.SMOOTH_FACTOR);
+          }
         }
 
         entry.lastState = trackingState;
@@ -486,8 +557,8 @@ export class ImageRecognition {
 
           if (entry.arTarget) {
             arScene.scene.remove(entry.arTarget);
-            this._disposeTarget(entry.arTarget);
           }
+          this._disposeEntry(entry);
           this.trackedMarkers.delete(idx);
 
           if (!entry.dismissed) {
@@ -503,8 +574,20 @@ export class ImageRecognition {
     }
   }
 
-  _disposeTarget(group) {
+  _disposeEntry(entry) {
+    if (!entry) return;
+
+    // удаляем XRAnchor
+    if (entry.anchor && typeof entry.anchor.delete === 'function') {
+      try {
+        entry.anchor.delete();
+      } catch (_) { /* ignore */ }
+      entry.anchor = null;
+    }
+
+    const group = entry.arTarget;
     if (!group) return;
+
     group.traverse((obj) => {
       // CSS3DObject — убираем DOM-элемент
       if (obj.element && obj.element.parentNode) {

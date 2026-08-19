@@ -37,7 +37,7 @@ export class ModelFactory {
         const group = new THREE.Group();
         group.name = `arTarget_${groupName}`;
 
-        // 1. Физический 3D-маркер в WebGL (зелёная точка) — в 2 раза меньше
+        // 1. Физический 3D-маркер в WebGL (зелёная точка) — в origin, в 2 раза меньше
         const sphere = this._createSphere();
         group.add(sphere);
 
@@ -105,12 +105,12 @@ export class ModelFactory {
 
         this._buildQuestionBody(bodyEl, { ...targetInfo, answerType }, handleAnswer);
 
-        // 3. CSS3DObject — панель в реальном 3D, сохраняет rotation группы
-        // scale 0.0005: в 2 раза меньше (было 0.001 → 320 CSS-px ≈ 0.16 м)
+        // 3. CSS3DObject — точно в позиции маркера (локальный origin)
+        // scale 0.0005 ≈ 0.16 м, rotation в радианах
         const cssObject = new CSS3DObject(panelEl);
         cssObject.scale.set(0.0005, 0.0005, 0.0005);
-        cssObject.position.set(0, 0.075, 0); // над маркером (в 2 раза ниже)
-        cssObject.rotation.set(-90, 0, 0); // поворот
+        cssObject.position.set(0, 0, 0);
+        cssObject.rotation.set(-Math.PI / 2, 0, 0);
         group.add(cssObject);
 
         group.userData = { targetInfo, sphere, cssObject, panelEl, onAnswer, answerType };
@@ -304,7 +304,6 @@ export class ModelFactory {
     }
 
     _createSphere() {
-        // радиус в 2 раза меньше (было 0.015)
         const geo = new THREE.SphereGeometry(0.0075, 24, 24);
         const mat = new THREE.MeshStandardMaterial({
             color: 0x00ffaa,
