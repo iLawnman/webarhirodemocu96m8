@@ -70,7 +70,7 @@ export function renderInspector() {
           <p style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4;">
             Стили применяются к панели в сцене. Свойства без селектора или правила с <code>:scope</code>.
           </p>
-          <textarea id="panel-custom-css" rows="8" style="width:100%; background:#0f172a; border:1px solid #334155; color:#e2e8f0; font-family:ui-monospace,monospace; font-size:11px; margin-bottom:6px; border-radius:6px; padding:8px; line-height:1.4;" placeholder="background: #1e293b;&#10;border: 2px solid #6366f1;&#10;&#10;:scope .label { color: gold; }">${cssVal}</textarea>
+          <textarea id="panel-custom-css" rows="8" style="width:100%; background:#0f172a; border:1px solid #334155; color:#e2e8f0; font-family:ui-monospace,monospace; font-size:11px; margin-bottom:6px; border-radius:6px; padding:8px; line-height:1.4; pointer-events:auto;" placeholder="background: #1e293b;&#10;border: 2px solid #6366f1;&#10;&#10;:scope .label { color: gold; }" oninput="window.__editor.updatePanelCSS(this.value)">${cssVal}</textarea>
           <button type="button" onclick="window.__editor.updatePanelCSS(document.getElementById('panel-custom-css').value)" style="width:100%;">Применить CSS</button>
         </div>
       `;
@@ -183,7 +183,32 @@ export function updateObjTransform(type, axis, value) {
 
 export function updateInspectorFromTransform() {
     if (!selectedObject) return;
-    renderInspector();
+    // Не пересобираем весь инспектор — иначе сбрасывается textarea CSS
+    const obj = selectedObject;
+    const container = document.getElementById('inspector-content');
+    if (!container) return;
+    const inputs = container.querySelectorAll('.prop-group input[type="number"]');
+    // Обновляем только transform-поля по порядку: pos x/y/z, rot x/y/z, scale x/y/z
+    const vals = [
+        obj.position.x, obj.position.y, obj.position.z,
+        THREE.MathUtils.radToDeg(obj.rotation.x),
+        THREE.MathUtils.radToDeg(obj.rotation.y),
+        THREE.MathUtils.radToDeg(obj.rotation.z),
+        obj.scale.x, obj.scale.y, obj.scale.z
+    ];
+    const transforms = container.querySelectorAll('.prop-group');
+    // Первые 3 prop-group после имени: pos, rot, scale (у каждого по 3 input)
+    let idx = 0;
+    for (let g = 1; g <= 3 && g < transforms.length; g++) {
+        const nums = transforms[g].querySelectorAll('input[type="number"]');
+        nums.forEach(inp => {
+            if (idx < vals.length && document.activeElement !== inp) {
+                const v = vals[idx];
+                inp.value = (g === 2) ? Number(v).toFixed(1) : Number(v).toFixed(3);
+            }
+            idx++;
+        });
+    }
 }
 
 function renderUIElementsList() {
@@ -275,7 +300,7 @@ export function removeUIElement(index) {
 
 export function updatePanelCSS(cssText) {
     if (!selectedObject || selectedObject.userData.type !== 'panel') return;
-    selectedObject.userData.customCSS = cssText || '';
+    selectedObject.userData.customCSS = cssText == null ? '' : String(cssText);
     applyPanelCustomCSS(selectedObject);
 }
 

@@ -197,8 +197,9 @@ export function applyPanelCustomCSS(obj) {
     }
     const uid = obj.userData.cssUid;
     const scope = '.ar-panel-' + uid;
+    const el = obj.userData.domElement;
 
-    obj.userData.domElement.classList.add('ar-panel', 'ar-panel-' + uid);
+    el.classList.add('ar-panel', 'ar-panel-' + uid);
 
     const styleId = 'ar-css-' + uid;
     let styleEl = document.getElementById(styleId);
@@ -208,8 +209,22 @@ export function applyPanelCustomCSS(obj) {
         document.head.appendChild(styleEl);
     }
 
-    const css = obj.userData.customCSS || '';
-    styleEl.textContent = scopePanelCSS(css, scope);
+    const css = (obj.userData.customCSS || '').trim();
+    // Inline-стили сильнее stylesheet — снимаем их, чтобы CSS редактора работал
+    if (css) {
+        ['background', 'backgroundColor', 'backgroundImage', 'border', 'borderColor',
+         'borderWidth', 'borderStyle', 'borderRadius', 'color', 'padding', 'boxShadow',
+         'fontFamily', 'fontSize', 'opacity'].forEach(prop => {
+            el.style[prop] = '';
+        });
+        styleEl.textContent = scopePanelCSS(css, scope);
+    } else {
+        styleEl.textContent = '';
+        // вернуть дефолты из panelData
+        const pd = obj.userData.panelData || {};
+        el.style.background = pd.bgColor || '#0a0a1e';
+        el.style.border = pd.borderColor ? ('3px solid ' + pd.borderColor) : 'none';
+    }
 }
 
 /** Удалить stylesheet панели */
@@ -223,8 +238,11 @@ export function refreshPanelDOM(obj) {
     if (!obj || !obj.userData.domElement || !obj.userData.panelData) return;
     const newDom = buildPanelDOM(obj.userData.panelData);
     obj.userData.domElement.innerHTML = '';
-    obj.userData.domElement.style.background = newDom.style.background;
-    obj.userData.domElement.style.border = newDom.style.border;
+    // если есть customCSS — не ставим inline background/border (иначе CSS не применится)
+    if (!(obj.userData.customCSS || '').trim()) {
+        obj.userData.domElement.style.background = newDom.style.background;
+        obj.userData.domElement.style.border = newDom.style.border;
+    }
     while (newDom.firstChild) {
         obj.userData.domElement.appendChild(newDom.firstChild);
     }
