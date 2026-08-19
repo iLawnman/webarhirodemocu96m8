@@ -38,6 +38,175 @@ export class UI {
         if (cb) cb();
       });
     }
+
+    // ── Рамка распознавания (создаём сами, без зависимости от HTML) ──
+    this._injectScanFrameStyles();
+    this.scanFrame = this._createScanFrame();
+    this._scanEffectTimer = null;
+  }
+
+  _injectScanFrameStyles() {
+    if (document.getElementById('ar-scan-frame-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'ar-scan-frame-styles';
+    style.textContent = `
+      #ar-scan-frame {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        width: min(70vw, 280px);
+        height: min(70vw, 280px);
+        transform: translate(-50%, -50%);
+        pointer-events: none;
+        z-index: 40;
+        display: none;
+        box-sizing: border-box;
+      }
+      #ar-scan-frame.visible { display: block; }
+
+      /* углы рамки */
+      #ar-scan-frame .corner {
+        position: absolute;
+        width: 28px;
+        height: 28px;
+        border-color: #00ffaa;
+        border-style: solid;
+        border-width: 0;
+      }
+      #ar-scan-frame .corner.tl { top: 0; left: 0; border-top-width: 3px; border-left-width: 3px; border-top-left-radius: 4px; }
+      #ar-scan-frame .corner.tr { top: 0; right: 0; border-top-width: 3px; border-right-width: 3px; border-top-right-radius: 4px; }
+      #ar-scan-frame .corner.bl { bottom: 0; left: 0; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 4px; }
+      #ar-scan-frame .corner.br { bottom: 0; right: 0; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 4px; }
+
+      /* мигание в режиме ожидания */
+      #ar-scan-frame.blink .corner {
+        animation: ar-scan-blink 1.1s ease-in-out infinite;
+      }
+      @keyframes ar-scan-blink {
+        0%, 100% { opacity: 0.35; border-color: #00ffaa88; }
+        50% { opacity: 1; border-color: #00ffaa; }
+      }
+
+      /* эффект распознавания 2с: сканирующая линия + пульс углов + заливка */
+      #ar-scan-frame .scan-line {
+        position: absolute;
+        left: 8%;
+        right: 8%;
+        height: 2px;
+        background: linear-gradient(90deg, transparent, #00ffaa, #ffffff, #00ffaa, transparent);
+        box-shadow: 0 0 12px #00ffaa, 0 0 24px #00ffaa88;
+        opacity: 0;
+        top: 10%;
+        pointer-events: none;
+      }
+      #ar-scan-frame .scan-fill {
+        position: absolute;
+        inset: 6px;
+        background: radial-gradient(circle at center, rgba(0,255,170,0.18) 0%, transparent 70%);
+        opacity: 0;
+        pointer-events: none;
+      }
+      #ar-scan-frame.effect .scan-line {
+        opacity: 1;
+        animation: ar-scan-line 2s linear forwards;
+      }
+      #ar-scan-frame.effect .scan-fill {
+        animation: ar-scan-fill 2s ease-out forwards;
+      }
+      #ar-scan-frame.effect .corner {
+        animation: ar-scan-corner-pulse 0.5s ease-in-out infinite;
+        border-color: #00ffcc;
+      }
+      @keyframes ar-scan-line {
+        0% { top: 8%; opacity: 0; }
+        10% { opacity: 1; }
+        90% { opacity: 1; }
+        100% { top: 90%; opacity: 0; }
+      }
+      @keyframes ar-scan-fill {
+        0% { opacity: 0; transform: scale(0.85); }
+        40% { opacity: 1; transform: scale(1); }
+        100% { opacity: 0; transform: scale(1.05); }
+      }
+      @keyframes ar-scan-corner-pulse {
+        0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px #00ffaa); }
+        50% { opacity: 0.6; filter: drop-shadow(0 0 10px #00ffaa); }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+
+  _createScanFrame() {
+    const el = document.createElement('div');
+    el.id = 'ar-scan-frame';
+    el.innerHTML = `
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+      <div class="scan-fill"></div>
+      <div class="scan-line"></div>
+    `;
+    document.body.appendChild(el);
+    return el;
+  }
+
+  /** Показать рамку в режиме ожидания (мигание). */
+  showScanFrameBlink() {
+    if (!this.scanFrame) return;
+    if (this._scanEffectTimer) {
+      clearTimeout(this._scanEffectTimer);
+      this._scanEffectTimer = null;
+    }
+    this.scanFrame.classList.remove('effect');
+    this.scanFrame.classList.add('visible', 'blink');
+  }
+
+  /**
+   * Запуск 2-секундного эффекта распознавания.
+   * @param {Function} [onDone] вызывается после окончания эффекта
+   */
+  playScanEffect(onDone) {
+    if (!this.scanFrame) {
+      if (typeof onDone === 'function') onDone();
+      return;
+    }
+    if (this._scanEffectTimer) {
+      clearTimeout(this._scanEffectTimer);
+      this._scanEffectTimer = null;
+    }
+    this.scanFrame.classList.remove('blink');
+    this.scanFrame.classList.add('visible', 'effect');
+
+    // перезапуск CSS-анимаций
+    const line = this.scanFrame.querySelector('.scan-line');
+    const fill = this.scanFrame.querySelector('.scan-fill');
+    if (line) {
+      line.style.animation = 'none';
+      // force reflow
+      void line.offsetWidth;
+      line.style.animation = '';
+    }
+    if (fill) {
+      fill.style.animation = 'none';
+      void fill.offsetWidth;
+      fill.style.animation = '';
+    }
+
+    this._scanEffectTimer = setTimeout(() => {
+      this._scanEffectTimer = null;
+      this.hideScanFrame();
+      if (typeof onDone === 'function') onDone();
+    }, 2000);
+  }
+
+  hideScanFrame() {
+    if (!this.scanFrame) return;
+    if (this._scanEffectTimer) {
+      clearTimeout(this._scanEffectTimer);
+      this._scanEffectTimer = null;
+    }
+    this.scanFrame.classList.remove('visible', 'blink', 'effect');
   }
 
   log(msg, type = '') {
