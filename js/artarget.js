@@ -3,9 +3,11 @@ import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 
 /**
  * ModelFactory — строит AR-таргет: физический маркер (сфера в WebGL) +
- * интерактивная HTML-панель вопроса (CSS3DObject).
+ * 5 отдельных интерактивных HTML-панелей (CSS3DObject):
+ *   TitleBlock, MainBlock, ButtonsBlock, LeftHelpBlock, RightBlock
  *
- * Стили панели — через классы (.ar-css3d-panel и дочерние).
+ * Все панели создаются всегда, независимо от наличия данных.
+ * Стили — через классы (.ar-css3d-panel и дочерние).
  * Темы подключаются ARSettings (./assets/arcss/*.css).
  */
 export class ModelFactory {
@@ -16,61 +18,196 @@ export class ModelFactory {
             ? targetData
             : { title: String(targetData) };
 
-        const title = targetInfo.title ?? targetInfo.name ?? String(targetData ?? '');
-        const questionText = targetInfo.question || targetInfo.mainText || 'Выберите действие для продолжения:';
-        const groupName = targetInfo.questId || targetInfo.id || title || 'target';
-        const answerType = targetInfo.answerType || 'Slide';
+        // ─── поля из JSON (answers / quest) ───────────────────────────────────
+        const title =
+            targetInfo.TitleText_Text ??
+            targetInfo.title ??
+            targetInfo.name ??
+            String(targetData ?? '');
 
+        const mainText =
+            targetInfo.MainTxt_Text ??
+            targetInfo.mainText ??
+            targetInfo.question ??
+            '';
+
+        const questionText =
+            targetInfo.Question ??
+            targetInfo.question ??
+            targetInfo.mainText ??
+            'Выберите действие для продолжения:';
+
+        const helpUp =
+            targetInfo.HelpUpText_Text ??
+            targetInfo.helpUp ??
+            targetInfo.HelpUp ??
+            '';
+
+        const helpDown =
+            targetInfo.HelpDownText_Text ??
+            targetInfo.helpDown ??
+            targetInfo.HelpDown ??
+            '';
+
+        const groupName =
+            targetInfo.questId ??
+            targetInfo.QuestID ??
+            targetInfo.id ??
+            targetInfo.AnswerID ??
+            title ??
+            'target';
+
+        const answerType =
+            targetInfo.AnswerType ??
+            targetInfo.answerType ??
+            'Slide';
+
+        const imageSrc =
+            targetInfo.imageSrc ??
+            targetInfo.AnswerPicture_Image ??
+            targetInfo.AdditionalImg_Image ??
+            null;
+
+        // ─── группа ──────────────────────────────────────────────────────────
         const group = new THREE.Group();
         group.name = `arTarget_${groupName}`;
 
         const sphere = this._createSphere();
         group.add(sphere);
 
-        const panelEl = document.createElement('div');
-        panelEl.className = 'ar-css3d-panel';
-
-        const titleEl = document.createElement('div');
-        titleEl.className = 'ar-panel-title';
-        titleEl.textContent = title || 'ОТЛАДКА AR';
-        panelEl.appendChild(titleEl);
-
-        if (targetInfo.imageSrc) {
-            const imgEl = document.createElement('img');
-            imgEl.className = 'ar-panel-image';
-            imgEl.src = targetInfo.imageSrc;
-            panelEl.appendChild(imgEl);
-        }
-
-        const questionEl = document.createElement('div');
-        questionEl.className = 'ar-panel-question';
-        questionEl.textContent = questionText;
-        panelEl.appendChild(questionEl);
-
-        const bodyEl = document.createElement('div');
-        bodyEl.className = 'ar-quest-body';
-        panelEl.appendChild(bodyEl);
-
         const handleAnswer = (value) => {
             if (typeof onAnswer === 'function') onAnswer(value);
         };
 
-        this._buildQuestionBody(bodyEl, { ...targetInfo, answerType }, handleAnswer);
+        // ─── 1. TitleBlock ────────────────────────────────────────────────────
+        const titlePanel = this._createPanel({
+            className: 'ar-css3d-panel ar-title-block',
+            name: 'TitleBlock',
+            position: [0, 0.09, 0],
+            rotation: [-Math.PI / 2, 0, 0],
+            scale: 0.0005
+        });
+        const titleEl = document.createElement('div');
+        titleEl.className = 'ar-panel-title';
+        titleEl.textContent = title || '';
+        titlePanel.element.appendChild(titleEl);
+        group.add(titlePanel);
 
-        const cssObject = new CSS3DObject(panelEl);
-        cssObject.scale.set(0.0005, 0.0005, 0.0005);
-        cssObject.position.set(0, 0, 0);
-        cssObject.rotation.set(-Math.PI / 2, 0, 0);
-        group.add(cssObject);
+        // ─── 2. MainBlock ─────────────────────────────────────────────────────
+        const mainPanel = this._createPanel({
+            className: 'ar-css3d-panel ar-main-block',
+            name: 'MainBlock',
+            position: [0, 0.02, 0],
+            rotation: [-Math.PI / 2, 0, 0],
+            scale: 0.0005
+        });
 
-        group.userData = { targetInfo, sphere, cssObject, panelEl, onAnswer, answerType };
+        if (imageSrc) {
+            const imgEl = document.createElement('img');
+            imgEl.className = 'ar-panel-image';
+            imgEl.src = imageSrc;
+            mainPanel.element.appendChild(imgEl);
+        }
+
+        const questionEl = document.createElement('div');
+        questionEl.className = 'ar-panel-question';
+        questionEl.textContent = questionText || mainText || '';
+        mainPanel.element.appendChild(questionEl);
+
+        // дополнительный текст (MainTxt), если он отличается от question
+        if (mainText && mainText !== questionText) {
+            const mainTxtEl = document.createElement('div');
+            mainTxtEl.className = 'ar-panel-maintext';
+            mainTxtEl.textContent = mainText;
+            mainPanel.element.appendChild(mainTxtEl);
+        }
+
+        group.add(mainPanel);
+
+        // ─── 3. ButtonsBlock ──────────────────────────────────────────────────
+        const buttonsPanel = this._createPanel({
+            className: 'ar-css3d-panel ar-buttons-block',
+            name: 'ButtonsBlock',
+            position: [0, -0.08, 0],
+            rotation: [-Math.PI / 2, 0, 0],
+            scale: 0.0005
+        });
+
+        const bodyEl = document.createElement('div');
+        bodyEl.className = 'ar-quest-body';
+        buttonsPanel.element.appendChild(bodyEl);
+
+        this._buildQuestionBody(
+            bodyEl,
+            { ...targetInfo, answerType, options: targetInfo.options || [] },
+            handleAnswer
+        );
+        group.add(buttonsPanel);
+
+        // ─── 4. LeftHelpBlock ─────────────────────────────────────────────────
+        const leftPanel = this._createPanel({
+            className: 'ar-css3d-panel ar-left-help-block',
+            name: 'LeftHelpBlock',
+            position: [-0.11, 0.01, 0],
+            rotation: [-Math.PI / 2, (18 * Math.PI) / 180, 0],
+            scale: 0.00045
+        });
+        const leftEl = document.createElement('div');
+        leftEl.className = 'ar-panel-help ar-panel-help-up';
+        leftEl.textContent = helpUp || '';
+        leftPanel.element.appendChild(leftEl);
+        group.add(leftPanel);
+
+        // ─── 5. RightBlock ────────────────────────────────────────────────────
+        const rightPanel = this._createPanel({
+            className: 'ar-css3d-panel ar-right-block',
+            name: 'RightBlock',
+            position: [0.11, 0.01, 0],
+            rotation: [-Math.PI / 2, (-18 * Math.PI) / 180, 0],
+            scale: 0.00045
+        });
+        const rightEl = document.createElement('div');
+        rightEl.className = 'ar-panel-help ar-panel-help-down';
+        rightEl.textContent = helpDown || '';
+        rightPanel.element.appendChild(rightEl);
+        group.add(rightPanel);
+
+        // ─── userData ─────────────────────────────────────────────────────────
+        group.userData = {
+            targetInfo,
+            sphere,
+            TitleBlock: titlePanel,
+            MainBlock: mainPanel,
+            ButtonsBlock: buttonsPanel,
+            LeftHelpBlock: leftPanel,
+            RightBlock: rightPanel,
+            panelEl: mainPanel.element,          // legacy
+            cssObject: mainPanel,                // legacy
+            onAnswer,
+            answerType
+        };
+
         return group;
+    }
+
+    // ─── helpers ──────────────────────────────────────────────────────────────
+
+    _createPanel({ className, name, position, rotation, scale }) {
+        const el = document.createElement('div');
+        el.className = className;
+
+        const obj = new CSS3DObject(el);
+        obj.name = name;
+        obj.scale.set(scale, scale, scale);
+        obj.position.set(...position);
+        obj.rotation.set(...rotation);
+        return obj;
     }
 
     _buildQuestionBody(bodyEl, data, onAnswer) {
         bodyEl.innerHTML = '';
 
-        const type = data.answerType || 'Slide';
+        const type = data.answerType || data.AnswerType || 'Slide';
         const options = data.options || [];
 
         if (type === 'Button') {
@@ -140,14 +277,15 @@ export class ModelFactory {
 
             const slideContent = document.createElement('div');
             slideContent.className = 'ar-slide-content';
-            slideContent.textContent = options[0]?.text || data.mainText || '';
+            slideContent.textContent = options[0]?.text || data.mainText || data.MainTxt_Text || '';
 
             const next = document.createElement('button');
             next.className = 'ar-slide-nav next';
             next.textContent = '►';
 
             const update = () => {
-                slideContent.textContent = options[idx]?.text || data.mainText || '';
+                slideContent.textContent =
+                    options[idx]?.text || data.mainText || data.MainTxt_Text || '';
             };
 
             prev.addEventListener('click', (e) => {
