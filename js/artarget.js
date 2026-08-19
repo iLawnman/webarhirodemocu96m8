@@ -110,6 +110,7 @@ export class ModelFactory {
         const cssObject = new CSS3DObject(panelEl);
         cssObject.scale.set(0.001, 0.001, 0.001);
         cssObject.position.set(0, 0.15, 0); // над маркером
+        cssObject.rotation.set(90, 0, 0); // поворот
         group.add(cssObject);
 
         group.userData = { targetInfo, sphere, cssObject, panelEl, onAnswer, answerType };
