@@ -6,7 +6,8 @@ import {
     buildPanelDOM,
     buildVideoDOM,
     buildHtmlDOM,
-    refreshPanelDOM
+    refreshPanelDOM,
+    serializePanelElements
 } from './panels.js';
 
 const objLoader = new THREE.OBJLoader();
@@ -170,7 +171,8 @@ export function createPanelMesh(data = {}, innerHTML = '') {
         type: 'panel',
         rawData: data,
         panelData,
-        innerHTML: innerHTML,
+        // всегда сериализуем в стандартный HTML (<button>, <input>, <img>, …)
+        innerHTML: serializePanelElements(panelData) || innerHTML || '',
         width,
         height,
         ...group.userData
