@@ -50,6 +50,7 @@ window.__editor = {
 };
 
 window.onload = () => {
-    init3D();
-    loadLocalPrefab();
+    Promise.resolve(init3D()).then(() => {
+        loadLocalPrefab();
+    });
 };

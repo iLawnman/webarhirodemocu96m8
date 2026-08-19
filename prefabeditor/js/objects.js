@@ -27,7 +27,8 @@ function createCSS3DWrapper(width, height, domElement) {
     proxy.name = 'proxy';
     group.add(proxy);
 
-    const css3d = new THREE.CSS3DObject(domElement);
+    const CssObj = (typeof THREE.CSS3DObject === 'function') ? THREE.CSS3DObject : THREE.CSS2DObject;
+    const css3d = new CssObj(domElement);
     css3d.position.set(0, 0, 0);
     // CSS3D: 1 unit ≈ 1 px при scale=1 → масштаб px→м: width_m / width_px
     const baseW = 300;

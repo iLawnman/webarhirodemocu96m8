@@ -4,6 +4,9 @@ export let scene, camera, renderer, css3dRenderer, orbitControls, transformContr
 export let selectedObject = null;
 export const editableObjects = [];
 
+// алиас для старого имени
+export let css2dRenderer;
+
 let onSelectCallback = null;
 let onDeselectCallback = null;
 let onTransformChangeCallback = null;
@@ -12,6 +15,38 @@ export function setSceneCallbacks({ onSelect, onDeselect, onTransformChange }) {
     onSelectCallback = onSelect;
     onDeselectCallback = onDeselect;
     onTransformChangeCallback = onTransformChange;
+}
+
+/** Подгрузить CSS3DRenderer, если его нет (нужен, чтобы панели не смотрели на камеру) */
+function ensureCSS3DRenderer() {
+    return new Promise((resolve, reject) => {
+        if (typeof THREE !== 'undefined' && typeof THREE.CSS3DRenderer === 'function') {
+            resolve();
+            return;
+        }
+        const rev = (typeof THREE !== 'undefined' && THREE.REVISION) ? THREE.REVISION : '160';
+        const urls = [
+            `https://cdn.jsdelivr.net/npm/three@0.${rev}.0/examples/js/renderers/CSS3DRenderer.js`,
+            'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/renderers/CSS3DRenderer.js',
+            'https://unpkg.com/three@0.160.0/examples/js/renderers/CSS3DRenderer.js'
+        ];
+        let i = 0;
+        const tryNext = () => {
+            if (i >= urls.length) {
+                reject(new Error('Не удалось загрузить CSS3DRenderer.js'));
+                return;
+            }
+            const s = document.createElement('script');
+            s.src = urls[i++];
+            s.onload = () => {
+                if (typeof THREE.CSS3DRenderer === 'function') resolve();
+                else tryNext();
+            };
+            s.onerror = tryNext;
+            document.head.appendChild(s);
+        };
+        tryNext();
+    });
 }
 
 export function init3D() {
@@ -26,14 +61,6 @@ export function init3D() {
     renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas3d'), antialias: true });
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
-
-    css3dRenderer = new THREE.CSS3DRenderer();
-    css3dRenderer.setSize(container.clientWidth, container.clientHeight);
-    css3dRenderer.domElement.style.position = 'absolute';
-    css3dRenderer.domElement.style.top = '0';
-    css3dRenderer.domElement.style.left = '0';
-    css3dRenderer.domElement.style.pointerEvents = 'none';
-    container.appendChild(css3dRenderer.domElement);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
     scene.add(ambientLight);
@@ -79,7 +106,36 @@ export function init3D() {
     });
 
     window.addEventListener('resize', onWindowResize);
-    animate();
+
+    // CSS3D — после загрузки скрипта (return Promise)
+    return ensureCSS3DRenderer().then(() => {
+        css3dRenderer = new THREE.CSS3DRenderer();
+        css2dRenderer = css3dRenderer;
+        css3dRenderer.setSize(container.clientWidth, container.clientHeight);
+        css3dRenderer.domElement.style.position = 'absolute';
+        css3dRenderer.domElement.style.top = '0';
+        css3dRenderer.domElement.style.left = '0';
+        css3dRenderer.domElement.style.pointerEvents = 'none';
+        container.appendChild(css3dRenderer.domElement);
+        animate();
+    }).catch(err => {
+        console.error(err);
+        if (typeof THREE.CSS2DRenderer === 'function') {
+            console.warn('Fallback: CSS2DRenderer (панели billboard)');
+            css3dRenderer = new THREE.CSS2DRenderer();
+            css2dRenderer = css3dRenderer;
+            css3dRenderer.setSize(container.clientWidth, container.clientHeight);
+            css3dRenderer.domElement.style.position = 'absolute';
+            css3dRenderer.domElement.style.top = '0';
+            css3dRenderer.domElement.style.left = '0';
+            css3dRenderer.domElement.style.pointerEvents = 'none';
+            container.appendChild(css3dRenderer.domElement);
+            window.__useCSS2DFallback = true;
+            animate();
+        } else {
+            alert('Не найден CSS3DRenderer. Подключите examples/js/renderers/CSS3DRenderer.js');
+        }
+    });
 }
 
 function resolveEditableRoot(obj) {
@@ -93,28 +149,29 @@ function resolveEditableRoot(obj) {
 
 function animate() {
     requestAnimationFrame(animate);
-    orbitControls.update();
-    renderer.render(scene, camera);
-    css3dRenderer.render(scene, camera);
+    if (orbitControls) orbitControls.update();
+    if (renderer && scene && camera) renderer.render(scene, camera);
+    if (css3dRenderer && scene && camera) css3dRenderer.render(scene, camera);
 }
 
 function onWindowResize() {
     const container = document.getElementById('viewport');
+    if (!camera || !container) return;
     camera.aspect = container.clientWidth / container.clientHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(container.clientWidth, container.clientHeight);
-    css3dRenderer.setSize(container.clientWidth, container.clientHeight);
+    if (renderer) renderer.setSize(container.clientWidth, container.clientHeight);
+    if (css3dRenderer) css3dRenderer.setSize(container.clientWidth, container.clientHeight);
 }
 
 export function selectObject(obj) {
     selectedObject = obj;
-    transformControls.attach(obj);
+    if (transformControls) transformControls.attach(obj);
     if (onSelectCallback) onSelectCallback(obj);
 }
 
 export function deselectObject() {
     selectedObject = null;
-    transformControls.detach();
+    if (transformControls) transformControls.detach();
     if (onDeselectCallback) onDeselectCallback();
 }
 
