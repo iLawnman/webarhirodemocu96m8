@@ -1,0 +1,139 @@
+/* theme-neon.css — зелёный неон (по умолчанию) */
+:root,
+[data-ar-theme="neon"] {
+    --ar-bg: rgba(10, 10, 20, 0.92);
+    --ar-border: #00ffaa;
+    --ar-border-soft: #00ffaa55;
+    --ar-title: #00ffaa;
+    --ar-text: #f8fafc;
+    --ar-btn-bg: #ffaa00;
+    --ar-btn-color: #000000;
+    --ar-ok-bg: #00cc66;
+    --ar-ok-color: #ffffff;
+    --ar-input-bg: #0a0a14;
+    --ar-input-border: #00ffaa;
+    --ar-nav-border: #00ffaa;
+    --ar-nav-color: #00ffaa;
+    --ar-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+.ar-css3d-panel {
+    width: 320px;
+    padding: 16px;
+    background: var(--ar-bg);
+    border: 2px solid var(--ar-border);
+    border-radius: 16px;
+    color: #ffffff;
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    text-align: center;
+    box-shadow: var(--ar-shadow);
+    pointer-events: auto;
+    user-select: none;
+    transform-style: preserve-3d;
+}
+
+.ar-css3d-panel .ar-panel-title {
+    font-size: 18px;
+    font-weight: bold;
+    color: var(--ar-title);
+    margin-bottom: 10px;
+    text-transform: uppercase;
+}
+
+.ar-css3d-panel .ar-panel-image {
+    width: 100%;
+    max-height: 140px;
+    object-fit: cover;
+    border-radius: 10px;
+    border: 1px solid var(--ar-border-soft);
+    margin-bottom: 10px;
+    display: block;
+}
+
+.ar-css3d-panel .ar-panel-question {
+    font-size: 14px;
+    color: var(--ar-text);
+    line-height: 1.4;
+    margin-bottom: 4px;
+}
+
+.ar-css3d-panel .ar-quest-options-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.ar-css3d-panel .ar-quest-btn {
+    width: 100%;
+    padding: 12px;
+    background: var(--ar-btn-bg);
+    color: var(--ar-btn-color);
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.ar-css3d-panel .ar-quest-input-block {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.ar-css3d-panel .ar-quest-input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--ar-input-border);
+    background: var(--ar-input-bg);
+    color: #ffffff;
+    font-size: 14px;
+}
+
+.ar-css3d-panel .ar-quest-submit-btn,
+.ar-css3d-panel .ar-quest-ok-btn {
+    padding: 10px 16px;
+    background: var(--ar-ok-bg);
+    color: var(--ar-ok-color);
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.ar-css3d-panel .ar-quest-ok-btn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 10px;
+}
+
+.ar-css3d-panel .ar-quest-slider {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.ar-css3d-panel .ar-slide-nav {
+    flex: 0 0 auto;
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--ar-nav-border);
+    background: transparent;
+    color: var(--ar-nav-color);
+    font-size: 16px;
+    cursor: pointer;
+}
+
+.ar-css3d-panel .ar-slide-content {
+    flex: 1;
+    min-width: 0;
+    font-size: 13px;
+    color: var(--ar-text);
+    line-height: 1.4;
+}

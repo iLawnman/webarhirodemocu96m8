@@ -4,12 +4,14 @@ import { ImageRecognition } from './recognition.js';
 import { ARScene } from './arscene.js';
 import { playSound } from "./audio.js";
 import { Settings } from './settings.js';
+import { ARSettings } from './arsettings.js';
 
 export class App {
   constructor() {
     this.ui = new UI();
     this.settings = new Settings();
-    this.recognition = null;          // создаём после загрузки settings
+    this.arSettings = new ARSettings();
+    this.recognition = null;
     this.arScene = new ARScene(this.ui);
 
     this.xrSession = null;
@@ -24,10 +26,21 @@ export class App {
   async init() {
     this.ui.log('App init (WebGL / Three.js WebXR)...', 'info');
 
-    // Штора активна с самого старта, пока идёт инициализация
     this.ui.showCurtain();
 
-    // 1. Settings — до всего
+    // 0. AR CSS-темы
+    this.ui.log('Loading AR CSS themes...', 'info');
+    try {
+      await this.arSettings.init();
+      this.ui.log(
+          `AR themes ready | count=${this.arSettings.getThemes().length} active=${this.arSettings.getActiveThemeId()}`,
+          'ok'
+      );
+    } catch (e) {
+      this.ui.log('AR themes failed: ' + (e && e.message ? e.message : e), 'warn');
+    }
+
+    // 1. Settings
     this.ui.log('Loading settings...', 'info');
     await this.settings.load();
     if (this.settings.isLoaded) {
@@ -39,7 +52,7 @@ export class App {
       this.ui.log('Settings failed to load, using defaults (unique_targets=0)', 'warn');
     }
 
-    // 2. Recognition (внутри — questManager + policies)
+    // 2. Recognition
     this.recognition = new ImageRecognition(this.ui, this.settings);
     await this.recognition.init();
 
@@ -109,14 +122,11 @@ export class App {
     await this.arScene.renderer.xr.setSession(this.xrSession);
     this.ui.log('Renderer session set (WebGL + local-floor)', 'ok');
 
-    // Показываем кнопку End AR после успешного старта сессии
     this.ui.showEndArButton();
     this.imageTrackingEnabled = true;
 
     this.recognition.attachInput(this.xrSession, this.arScene);
 
-    // Пол установлен (сессия готова) → штора уезжает вверх,
-    // сверху выезжает панель "ИЩИТЕ!" со ожидаемым (или случайным) маркером
     this.ui.hideCurtain();
     this.recognition.presentSearchPrompt();
 
@@ -128,7 +138,6 @@ export class App {
       this.xrSession = null;
       this.frameCount = 0;
 
-      // Возвращаем UI в первоначальное состояние
       this.ui.hideEndArButton();
       this.ui.enableArButton();
       this.ui.showCurtain();
