@@ -279,10 +279,10 @@ export class ImageRecognition {
    */
   reset(arScene) {
     for (const [, entry] of this.trackedMarkers) {
-      if (entry.arTarget) {
-        if (arScene) arScene.scene.remove(entry.arTarget);
-        this._disposeEntry(entry);
+      if (entry.arTarget && arScene) {
+        arScene.scene.remove(entry.arTarget);
       }
+      this._disposeEntry(entry);
     }
     this.trackedMarkers.clear();
     this.state = 'waitingImage';
@@ -354,12 +354,32 @@ export class ImageRecognition {
     }
   }
 
+  /**
+   * Ответ дан → полностью выключаем AR-таргет (CSS3D + WebGL) до потери трекинга.
+   * Entry с dismissed=true остаётся, чтобы не пересоздать панель, пока маркер в кадре.
+   */
   _onQuestionAnswered(entry, value) {
     if (entry.dismissed) return;
     entry.dismissed = true;
 
+    // 1. Скрываем CSS3D DOM (visible родителя CSS3DRenderer не учитывает)
     if (entry.arTarget) {
+      const ud = entry.arTarget.userData || {};
+      if (ud.panelEl) {
+        ud.panelEl.style.display = 'none';
+        if (ud.panelEl.parentNode) {
+          ud.panelEl.parentNode.removeChild(ud.panelEl);
+        }
+      }
+      if (ud.cssObject) {
+        ud.cssObject.visible = false;
+      }
       entry.arTarget.visible = false;
+
+      // 2. Убираем из сцены (сфера + CSS3DObject больше не рендерятся)
+      if (this._arScene && entry.arTarget.parent) {
+        this._arScene.scene.remove(entry.arTarget);
+      }
     }
 
     const questData = entry.questData;
@@ -524,10 +544,8 @@ export class ImageRecognition {
         if (pos && Number.isFinite(pos.x) && Number.isFinite(pos.y) && Number.isFinite(pos.z)) {
           this._tmpPos.set(pos.x, pos.y, pos.z);
           if (entry.anchor) {
-            // якорь уже стабилен — ставим жёстко
             target.position.copy(this._tmpPos);
           } else {
-            // без якоря — сглаживание
             target.position.lerp(this._tmpPos, ImageRecognition.SMOOTH_FACTOR);
           }
         }
@@ -555,7 +573,7 @@ export class ImageRecognition {
           entry.lastState = 'lost';
           this.ui.log('[' + idx + '] Tracking lost', 'warn');
 
-          if (entry.arTarget) {
+          if (entry.arTarget && entry.arTarget.parent) {
             arScene.scene.remove(entry.arTarget);
           }
           this._disposeEntry(entry);
@@ -606,5 +624,7 @@ export class ImageRecognition {
         }
       }
     });
+
+    entry.arTarget = null;
   }
 }
