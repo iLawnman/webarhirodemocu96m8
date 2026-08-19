@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Редактор — Квест Платформа</title>
+  <link rel="stylesheet" href="./prefabeditor/css/styles.css">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/TransformControls.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/renderers/CSS2DRenderer.js"></script>
+</head>
+<body>
+
+<div id="sidebar">
+  <div class="section">
+    <h3>Локальные префабы</h3>
+    <button onclick="window.__editor.loadLocalPrefab()">Загрузить дефолтный шаблон</button>
+    <button onclick="document.getElementById('file-input').click()">Открыть HTML...</button>
+    <button class="btn-success" onclick="document.getElementById('json-input').click()">Загрузить JSON дизайн</button>
+    <button onclick="window.__editor.exportHTML()">Сохранить HTML</button>
+
+    <input type="file" id="file-input" style="display:none" accept=".html,.template" onchange="window.__editor.handleFileSelect(event)">
+    <input type="file" id="json-input" style="display:none" accept=".json" onchange="window.__editor.handleJsonDesignSelect(event)">
+    <select id="json-row-selector" style="display:none; margin-top:6px;" onchange="window.__editor.handleJsonRowChange(event)"></select>
+  </div>
+
+  <div class="section">
+    <h3>Добавить 3D Элемент</h3>
+    <button onclick="window.__editor.addObject3D()">+ 3D Объект (OBJ)</button>
+    <button onclick="window.__editor.addPanel()">+ UI Панель</button>
+    <button onclick="window.__editor.addVideoObject3D()">+ Video</button>
+    <button onclick="window.__editor.addHtmlObject3D()">+ Other HTML</button>
+  </div>
+
+  <div class="section hierarchy">
+    <h3>Иерархия сцены</h3>
+    <div id="tree"></div>
+  </div>
+</div>
+
+<div id="viewport">
+  <canvas id="canvas3d"></canvas>
+</div>
+
+<div id="inspector">
+  <h3>Свойства объекта</h3>
+  <div id="inspector-content">
+    <p style="font-size: 13px; color: var(--muted); margin-top: 8px; line-height: 1.5;">Выберите элемент в сцене для редактирования.</p>
+  </div>
+</div>
+
+<script type="module" src="./prefabeditor/js/main.js"></script>
+</body>
+</html>
