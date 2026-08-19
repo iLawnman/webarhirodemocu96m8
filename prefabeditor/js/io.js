@@ -92,7 +92,10 @@ export function exportHTML() {
         } else if (obj.userData.type === 'panel') {
             const pw = obj.userData.width != null ? obj.userData.width : (obj.userData.rawData && obj.userData.rawData.width) || '0.3';
             const ph = obj.userData.height != null ? obj.userData.height : (obj.userData.rawData && obj.userData.rawData.height) || '0.3';
-            output += `  <panel\n    name="${obj.name}"\n    data-width="${pw}"\n    data-height="${ph}"\n    data-position="${pos}"\n    data-rotation="${rot}"\n    data-scale="${scl}"\n  >\n`;
+            const cssAttr = obj.userData.customCSS
+                ? `\n    data-css="${encodeHtmlB64(obj.userData.customCSS)}"`
+                : '';
+            output += `  <panel\n    name="${obj.name}"\n    data-width="${pw}"\n    data-height="${ph}"\n    data-position="${pos}"\n    data-rotation="${rot}"\n    data-scale="${scl}"${cssAttr}\n  >\n`;
             output += obj.userData.innerHTML || `    <div class="panel"></div>\n`;
             output += `  </panel>\n`;
         } else if (obj.userData.type === 'video') {

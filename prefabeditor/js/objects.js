@@ -1,13 +1,13 @@
 /** Создание 3D-объектов: model (Mesh), panel/video/html (CSS2DObject + proxy plane) */
 
-import { normalizePath, applyTransformData } from './utils.js';
+import { normalizePath, applyTransformData, decodeHtmlB64 } from './utils.js';
 import {
     parsePanelHTML,
     buildPanelDOM,
     buildVideoDOM,
     buildHtmlDOM,
     refreshPanelDOM,
-    serializePanelElements
+    applyPanelCustomCSS
 } from './panels.js';
 
 const objLoader = new THREE.OBJLoader();
@@ -16,7 +16,6 @@ const objLoader = new THREE.OBJLoader();
 function createCSS2DWrapper(width, height, domElement) {
     const group = new THREE.Group();
 
-    // Proxy mesh для выделения / transform
     const geo = new THREE.PlaneGeometry(width, height);
     const mat = new THREE.MeshBasicMaterial({
         transparent: true,
@@ -28,10 +27,8 @@ function createCSS2DWrapper(width, height, domElement) {
     proxy.name = 'proxy';
     group.add(proxy);
 
-    // Реальный DOM
     const css2d = new THREE.CSS2DObject(domElement);
     css2d.position.set(0, 0, 0);
-    // Масштаб CSS ≈ метры (базовый размер DOM 300×180 px ≈ 0.3×0.18 м)
     const baseW = 300;
     const baseH = 180;
     css2d.scale.set(width / (baseW / 1000), height / (baseH / 1000), 1);
@@ -118,7 +115,6 @@ export function createVideoMesh(data = {}) {
 }
 
 export function refreshVideoTexture(mesh) {
-    // DOM-версия
     const dom = mesh.userData.domElement;
     if (!dom) return;
     const video = dom.querySelector('video');
@@ -162,6 +158,20 @@ export function createPanelMesh(data = {}, innerHTML = '') {
     const width = parseFloat(data.width) || 0.3;
     const height = parseFloat(data.height) || 0.3;
 
+    // CSS из data-css (base64) / data-custom-css / <style> внутри HTML
+    let customCSS = '';
+    if (data.css) {
+        customCSS = decodeHtmlB64(data.css) || data.css;
+    } else if (data.customCss) {
+        customCSS = decodeHtmlB64(data.customCss) || data.customCss;
+    } else if (data.customCSS) {
+        customCSS = data.customCSS;
+    }
+    if (!customCSS && innerHTML && innerHTML.includes('<style')) {
+        const m = innerHTML.match(/<style[^>]*>([\s\S]*?)<\/style>/i);
+        if (m) customCSS = m[1].trim();
+    }
+
     const panelData = parsePanelHTML(innerHTML);
     const dom = buildPanelDOM(panelData);
 
@@ -171,14 +181,15 @@ export function createPanelMesh(data = {}, innerHTML = '') {
         type: 'panel',
         rawData: data,
         panelData,
-        // всегда сериализуем в стандартный HTML (<button>, <input>, <img>, …)
-        innerHTML: serializePanelElements(panelData) || innerHTML || '',
+        innerHTML: innerHTML,
+        customCSS: customCSS || '',
         width,
         height,
         ...group.userData
     };
 
     applyTransformData(group, data);
+    applyPanelCustomCSS(group);
     return group;
 }
 

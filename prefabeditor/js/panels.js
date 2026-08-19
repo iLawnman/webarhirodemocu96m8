@@ -1,10 +1,10 @@
-/** Панели: DOM-рендер через CSS2D, парсинг/сериализация стандартных HTML-элементов, prop-панели из JSON */
+/** Панели: DOM-рендер через CSS2D, парсинг HTML, prop-панели из JSON + custom CSS */
 
 import { normalizePath, escapeAttr, decodeHtmlB64 } from './utils.js';
 
 export const DESIGN_PROP_KEYS = ['font', 'color', 'image', 'fx', 'sound', 'text', 'prefab'];
 
-/** Стандартные DOM-элементы (button, input, img, div, video и т.д.) */
+/** Стандартные DOM-элементы */
 function createTextEl(text, opts = {}) {
     const el = document.createElement('div');
     el.className = 'ui-text';
@@ -19,20 +19,17 @@ function createTextEl(text, opts = {}) {
 function createButtonEl(text, opts = {}) {
     const el = document.createElement('button');
     el.className = 'ui-button';
-    el.type = 'button';
     el.textContent = text || 'Button';
     if (opts.btnBg) el.style.background = opts.btnBg;
     if (opts.fontSize) el.style.fontSize = opts.fontSize + 'px';
-    if (opts.color) el.style.color = opts.color;
     return el;
 }
 
 function createInputEl(placeholder, opts = {}) {
     const el = document.createElement('input');
     el.className = 'ui-input';
-    el.type = opts.inputType || 'text';
+    el.type = 'text';
     el.placeholder = placeholder || '';
-    if (opts.value) el.value = opts.value;
     if (opts.fontSize) el.style.fontSize = opts.fontSize + 'px';
     return el;
 }
@@ -93,67 +90,6 @@ export function serializePropPanelDiv(props) {
         if (props[k]) attrs += ` data-${k}="${escapeAttr(props[k])}"`;
     });
     return `<div ${attrs}></div>`;
-}
-
-/**
- * Сериализация structured elements → стандартный HTML (button, input, img, video, div).
- * Используется для экспорта и синхронизации userData.innerHTML.
- */
-export function serializePanelElements(panelData) {
-    if (!panelData) return '<div class="panel"></div>';
-
-    // prop-panel хранится компактно через data-*
-    if (panelData.props) {
-        return serializePropPanelDiv(panelData.props);
-    }
-
-    const parts = [];
-    const bg = panelData.bgColor || '#0a0a1e';
-    const border = panelData.borderColor ? ` border: 3px solid ${panelData.borderColor};` : '';
-    parts.push(`<div class="panel" style="background:${bg};${border} padding:10px; border-radius:6px; color:#fff; font-family:Inter,sans-serif;">`);
-
-    (panelData.elements || []).forEach(el => {
-        if (el.type === 'text' || el.type === 'label') {
-            const style = [
-                el.fontSize ? `font-size:${el.fontSize}px` : '',
-                el.color ? `color:${el.color}` : '',
-                el.fontWeight ? `font-weight:${el.fontWeight}` : '',
-                'text-align:center; line-height:1.3;'
-            ].filter(Boolean).join(';');
-            parts.push(`  <div class="ui-text" style="${style}">${escapeAttr(el.text || '')}</div>`);
-        } else if (el.type === 'button') {
-            const style = [
-                el.btnBg ? `background:${el.btnBg}` : 'background:#10b981',
-                el.fontSize ? `font-size:${el.fontSize}px` : '',
-                el.color ? `color:${el.color}` : 'color:#fff',
-                'display:block; width:100%; padding:8px 12px; border:none; border-radius:6px; font-weight:600;'
-            ].filter(Boolean).join(';');
-            parts.push(`  <button class="ui-button" type="button" style="${style}">${escapeAttr(el.text || 'Button')}</button>`);
-        } else if (el.type === 'input') {
-            const style = [
-                el.fontSize ? `font-size:${el.fontSize}px` : '',
-                'width:100%; padding:6px 10px; border:1px solid #475569; border-radius:6px; background:rgba(15,23,42,0.9); color:#e2e8f0;'
-            ].filter(Boolean).join(';');
-            parts.push(`  <input class="ui-input" type="${escapeAttr(el.inputType || 'text')}" placeholder="${escapeAttr(el.text || '')}" value="${escapeAttr(el.value || '')}" style="${style}">`);
-        } else if (el.type === 'image') {
-            const style = [
-                el.width ? `width:${el.width}px` : 'max-width:100%',
-                el.height ? `height:${el.height}px` : '',
-                'display:block; border-radius:4px; object-fit:contain; margin:0 auto;'
-            ].filter(Boolean).join(';');
-            parts.push(`  <img class="ui-image" src="${escapeAttr(el.src || '')}" alt="${escapeAttr(el.alt || '')}" style="${style}">`);
-        } else if (el.type === 'video') {
-            parts.push(`  <div class="css2d-video" style="display:flex; flex-direction:column; align-items:center; gap:4px;">`);
-            parts.push(`    <video class="ui-video" src="${escapeAttr(el.src || '')}" muted playsinline style="width:100%; max-height:120px; background:#000; border-radius:4px;"></video>`);
-            parts.push(`    <div class="video-label" style="font-size:12px; color:#ccc;">${escapeAttr(el.label || 'Video')}</div>`);
-            parts.push(`  </div>`);
-        } else if (el.type === 'html') {
-            parts.push(`  <div class="css2d-html html-block">${el.html || ''}</div>`);
-        }
-    });
-
-    parts.push('</div>');
-    return parts.join('\n');
 }
 
 export function buildPanelDOM(panelData) {
@@ -236,6 +172,53 @@ export function buildHtmlDOM(html) {
     return el;
 }
 
+/**
+ * Скоупинг CSS под конкретную панель.
+ * - если нет «{» — набор свойств → .scope { ... }
+ * - :scope и .css2d-panel заменяются на селектор панели
+ */
+export function scopePanelCSS(css, scopeSelector) {
+    if (!css || !String(css).trim()) return '';
+    const text = String(css).trim();
+    if (!text.includes('{')) {
+        return scopeSelector + ' {\n  ' + text + '\n}\n';
+    }
+    return text
+        .replace(/:scope\b/g, scopeSelector)
+        .replace(/\.css2d-panel\b/g, scopeSelector);
+}
+
+/** Применить customCSS панели к DOM в сцене (CSS2D) */
+export function applyPanelCustomCSS(obj) {
+    if (!obj || !obj.userData.domElement) return;
+
+    if (!obj.userData.cssUid) {
+        obj.userData.cssUid = 'p' + Math.random().toString(36).slice(2, 9);
+    }
+    const uid = obj.userData.cssUid;
+    const scope = '.ar-panel-' + uid;
+
+    obj.userData.domElement.classList.add('ar-panel', 'ar-panel-' + uid);
+
+    const styleId = 'ar-css-' + uid;
+    let styleEl = document.getElementById(styleId);
+    if (!styleEl) {
+        styleEl = document.createElement('style');
+        styleEl.id = styleId;
+        document.head.appendChild(styleEl);
+    }
+
+    const css = obj.userData.customCSS || '';
+    styleEl.textContent = scopePanelCSS(css, scope);
+}
+
+/** Удалить stylesheet панели */
+export function removePanelCustomCSS(obj) {
+    if (!obj || !obj.userData.cssUid) return;
+    const styleEl = document.getElementById('ar-css-' + obj.userData.cssUid);
+    if (styleEl) styleEl.remove();
+}
+
 export function refreshPanelDOM(obj) {
     if (!obj || !obj.userData.domElement || !obj.userData.panelData) return;
     const newDom = buildPanelDOM(obj.userData.panelData);
@@ -245,26 +228,16 @@ export function refreshPanelDOM(obj) {
     while (newDom.firstChild) {
         obj.userData.domElement.appendChild(newDom.firstChild);
     }
-    // синхронизируем serializable HTML для экспорта
-    obj.userData.innerHTML = serializePanelElements(obj.userData.panelData);
+    applyPanelCustomCSS(obj);
 }
 
-/**
- * Парсинг HTML → structured panelData.
- * Поддерживает:
- *  - prop-panel (data-* атрибуты)
- *  - artarget-root / panel-group
- *  - legacy class="label|name|sub|btn"
- *  - стандартные DOM: <button>, <input>, <img>, <video>, <div class="ui-text"> и произвольный html
- */
 export function parsePanelHTML(html) {
     const panelData = { bgColor: '#0a0a30', borderColor: '#00ffaa', elements: [] };
     if (!html) return panelData;
 
-    // 1. Prop-panel из JSON-дизайна
     if (html.includes('prop-panel')) {
         const parser = new DOMParser();
-        const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+        const doc = parser.parseFromString('<div>' + html + '</div>', 'text/html');
         const el = doc.querySelector('.prop-panel');
         const props = {};
         if (el) {
@@ -278,13 +251,12 @@ export function parsePanelHTML(html) {
         return buildPropPanelVisual(props);
     }
 
-    // 2. artarget-root / panel-group
     if (html.includes('artarget-root')) {
         panelData.bgColor = '#141428';
         panelData.borderColor = '#FFD700';
 
         const parser = new DOMParser();
-        const doc = parser.parseFromString(`<div>${html}</div>`, 'text/html');
+        const doc = parser.parseFromString('<div>' + html + '</div>', 'text/html');
         const groups = doc.querySelectorAll('.panel-group');
 
         let currentY = 8;
@@ -310,8 +282,8 @@ export function parsePanelHTML(html) {
                 const textSpan = textBlock.querySelector('.label-text');
                 const labelText = textSpan ? textSpan.textContent : '';
 
-                let displayStr = `${groupName}: ${labelText}`;
-                if (fx) displayStr += ` (FX: ${fx})`;
+                let displayStr = groupName + ': ' + labelText;
+                if (fx) displayStr += ' (FX: ' + fx + ')';
 
                 panelData.elements.push({
                     type: 'text',
@@ -327,7 +299,6 @@ export function parsePanelHTML(html) {
         return panelData;
     }
 
-    // 3. Цветовые пресеты
     if (html.includes('img-panel')) {
         panelData.bgColor = '#1a0033';
         panelData.borderColor = '#ff66cc';
@@ -336,150 +307,40 @@ export function parsePanelHTML(html) {
         panelData.borderColor = null;
     }
 
-    // 4. Парсим DOM-дерево стандартных элементов
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(`<div id="__root">${html}</div>`, 'text/html');
-    const root = doc.getElementById('__root');
+    const labelMatch = html.match(/class="label">([^<]+)</);
+    if (labelMatch) panelData.elements.push({ type: 'text', text: labelMatch[1], y: 8, fontSize: 18, color: panelData.borderColor || '#fff' });
 
-    const panelEl = root.querySelector('.panel') || root.firstElementChild;
-    if (panelEl && panelEl.style) {
-        if (panelEl.style.background) panelData.bgColor = panelEl.style.background;
-        if (panelEl.style.borderColor) panelData.borderColor = panelEl.style.borderColor;
+    const nameMatch = html.match(/class="name">([^<]+)</);
+    if (nameMatch) panelData.elements.push({ type: 'text', text: nameMatch[1], y: 40, fontSize: 22, fontWeight: 'bold' });
+
+    const subMatch = html.match(/class="sub">([^<]+)</);
+    if (subMatch) panelData.elements.push({ type: 'text', text: subMatch[1], y: 70, fontSize: 14, color: '#aaa' });
+
+    const btnMatch = html.match(/class="btn">([^<]+)</);
+    if (btnMatch) panelData.elements.push({ type: 'button', text: btnMatch[1], y: 100, fontSize: 16, btnBg: '#00cc66' });
+
+    const videoMatch = html.match(/<video[^>]*data-src="([^"]*)"[^>]*data-y="([^"]*)"[^>]*>/);
+    if (videoMatch) {
+        panelData.elements.push({
+            type: 'video',
+            src: normalizePath(videoMatch[1]),
+            label: 'Video',
+            y: parseFloat(videoMatch[2]) || 80,
+            width: 200,
+            height: 110
+        });
     }
 
-    const walk = (node) => {
-        if (!node || node.nodeType !== 1) return;
-
-        const tag = node.tagName.toLowerCase();
-        const cls = (node.className || '').toString();
-
-        // button
-        if (tag === 'button' || cls.includes('ui-button') || cls.includes('btn')) {
-            panelData.elements.push({
-                type: 'button',
-                text: (node.textContent || '').trim() || 'Button',
-                fontSize: parseInt(node.style.fontSize, 10) || 14,
-                btnBg: node.style.background || node.style.backgroundColor || '#10b981',
-                color: node.style.color || '#ffffff'
-            });
-            return;
-        }
-
-        // input
-        if (tag === 'input' || cls.includes('ui-input')) {
-            panelData.elements.push({
-                type: 'input',
-                text: node.getAttribute('placeholder') || node.placeholder || '',
-                value: node.getAttribute('value') || node.value || '',
-                inputType: node.getAttribute('type') || 'text',
-                fontSize: parseInt(node.style.fontSize, 10) || 14
-            });
-            return;
-        }
-
-        // img
-        if (tag === 'img' || cls.includes('ui-image') || cls.includes('panel-image')) {
-            panelData.elements.push({
-                type: 'image',
-                src: normalizePath(node.getAttribute('src') || ''),
-                alt: node.getAttribute('alt') || '',
-                width: parseInt(node.style.width, 10) || parseInt(node.getAttribute('width'), 10) || 80,
-                height: parseInt(node.style.height, 10) || parseInt(node.getAttribute('height'), 10) || 60
-            });
-            return;
-        }
-
-        // video
-        if (tag === 'video' || cls.includes('ui-video') || cls.includes('css2d-video')) {
-            let src = '';
-            let label = 'Video';
-            if (tag === 'video') {
-                src = node.getAttribute('src') || '';
-            } else {
-                const v = node.querySelector('video');
-                if (v) src = v.getAttribute('src') || '';
-                const lbl = node.querySelector('.video-label');
-                if (lbl) label = lbl.textContent || label;
-            }
-            panelData.elements.push({
-                type: 'video',
-                src: normalizePath(src),
-                label
-            });
-            return;
-        }
-
-        // html-block
-        if (cls.includes('html-block') || cls.includes('css2d-html')) {
-            const rawB64 = node.getAttribute('data-raw-b64');
-            panelData.elements.push({
-                type: 'html',
-                html: rawB64 ? decodeHtmlB64(rawB64) : (node.innerHTML || ''),
-                width: 220,
-                height: 140
-            });
-            return;
-        }
-
-        // текст
-        if (cls.includes('ui-text') || cls.includes('label') || cls.includes('name') || cls.includes('sub') ||
-            (['div', 'span', 'p', 'h1', 'h2', 'h3', 'h4'].includes(tag) && node.children.length === 0 && (node.textContent || '').trim())) {
-            const text = (node.textContent || '').trim();
-            if (text) {
-                panelData.elements.push({
-                    type: 'text',
-                    text,
-                    fontSize: parseInt(node.style.fontSize, 10) || (cls.includes('name') ? 22 : cls.includes('label') ? 18 : 14),
-                    color: node.style.color || (cls.includes('sub') ? '#aaa' : '#ffffff'),
-                    fontWeight: node.style.fontWeight || (cls.includes('name') ? 'bold' : undefined)
-                });
-            }
-            return;
-        }
-
-        Array.from(node.children).forEach(walk);
-    };
-
-    const start = root.querySelector('.panel') || root;
-    Array.from(start.children).forEach(walk);
-
-    // fallback: legacy regex
-    if (panelData.elements.length === 0) {
-        const labelMatch = html.match(/class="label">([^<]+)</);
-        if (labelMatch) panelData.elements.push({ type: 'text', text: labelMatch[1], y: 8, fontSize: 18, color: panelData.borderColor || '#fff' });
-
-        const nameMatch = html.match(/class="name">([^<]+)</);
-        if (nameMatch) panelData.elements.push({ type: 'text', text: nameMatch[1], y: 40, fontSize: 22, fontWeight: 'bold' });
-
-        const subMatch = html.match(/class="sub">([^<]+)</);
-        if (subMatch) panelData.elements.push({ type: 'text', text: subMatch[1], y: 70, fontSize: 14, color: '#aaa' });
-
-        const btnMatch = html.match(/class="btn">([^<]+)</);
-        if (btnMatch) panelData.elements.push({ type: 'button', text: btnMatch[1], y: 100, fontSize: 16, btnBg: '#00cc66' });
-
-        const videoMatch = html.match(/<video[^>]*data-src="([^"]*)"[^>]*data-y="([^"]*)"[^>]*>/);
-        if (videoMatch) {
-            panelData.elements.push({
-                type: 'video',
-                src: normalizePath(videoMatch[1]),
-                label: 'Video',
-                y: parseFloat(videoMatch[2]) || 80,
-                width: 200,
-                height: 110
-            });
-        }
-
-        const htmlBlockRegex = /<div class="html-block" data-raw-b64="([^"]*)" data-y="([^"]*)"[^>]*><\/div>/g;
-        let hbMatch;
-        while ((hbMatch = htmlBlockRegex.exec(html)) !== null) {
-            panelData.elements.push({
-                type: 'html',
-                html: decodeHtmlB64(hbMatch[1]),
-                y: parseFloat(hbMatch[2]) || 60,
-                width: 220,
-                height: 140
-            });
-        }
+    const htmlBlockRegex = /<div class="html-block" data-raw-b64="([^"]*)" data-y="([^"]*)"[^>]*><\/div>/g;
+    let hbMatch;
+    while ((hbMatch = htmlBlockRegex.exec(html)) !== null) {
+        panelData.elements.push({
+            type: 'html',
+            html: decodeHtmlB64(hbMatch[1]),
+            y: parseFloat(hbMatch[2]) || 60,
+            width: 220,
+            height: 140
+        });
     }
 
     return panelData;

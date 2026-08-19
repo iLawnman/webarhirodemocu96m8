@@ -4,6 +4,7 @@ import { init3D, setSceneCallbacks, selectObject } from './scene.js';
 import {
     renderInspector, clearInspector, updateInspectorFromTransform,
     updateObjName, updateObjTransform, updateObjectProp, updateDesignPanelProp,
+    updatePanelCSS,
     addUIElement, updateUIElement, removeUIElement,
     addObject3D, addPanel, addVideoObject3D, addHtmlObject3D, deleteSelectedObject
 } from './inspector.js';
@@ -40,6 +41,7 @@ window.__editor = {
     updateObjTransform,
     updateObjectProp,
     updateDesignPanelProp,
+    updatePanelCSS,
     addUIElement,
     updateUIElement,
     removeUIElement,

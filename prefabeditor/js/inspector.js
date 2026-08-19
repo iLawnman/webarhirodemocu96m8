@@ -7,7 +7,7 @@ import {
     rebuildPlaneGeometry, reloadObjectModel,
     refreshVideoTexture, refreshHtmlTexture
 } from './objects.js';
-import { buildPropPanelVisual, serializePropPanelDiv, serializePanelElements, refreshPanelDOM } from './panels.js';
+import { buildPropPanelVisual, serializePropPanelDiv, refreshPanelDOM, applyPanelCustomCSS } from './panels.js';
 import { updateHierarchyTree } from './io.js';
 
 export function renderInspector() {
@@ -55,6 +55,7 @@ export function renderInspector() {
     if (obj.userData.type === 'panel') {
         const w = obj.userData.width != null ? obj.userData.width : (parseFloat(obj.userData.rawData && obj.userData.rawData.width) || 0.3);
         const h = obj.userData.height != null ? obj.userData.height : (parseFloat(obj.userData.rawData && obj.userData.rawData.height) || 0.3);
+        const cssVal = (obj.userData.customCSS || '').replace(/</g, '&lt;');
         html += `
         <hr style="border-color:#3c3c3c; margin: 12px 0;">
         <div class="prop-group">
@@ -63,6 +64,14 @@ export function renderInspector() {
             <div><label>Ширина (м)</label><input type="number" step="0.01" min="0.01" value="${w}" onchange="window.__editor.updateObjectProp('width', this.value)"></div>
             <div><label>Высота (м)</label><input type="number" step="0.01" min="0.01" value="${h}" onchange="window.__editor.updateObjectProp('height', this.value)"></div>
           </div>
+        </div>
+        <div class="prop-group">
+          <h3>CSS панели</h3>
+          <p style="font-size:11px;color:var(--muted);margin-bottom:6px;line-height:1.4;">
+            Стили применяются к панели в сцене. Свойства без селектора или правила с <code>:scope</code>.
+          </p>
+          <textarea id="panel-custom-css" rows="8" style="width:100%; background:#0f172a; border:1px solid #334155; color:#e2e8f0; font-family:ui-monospace,monospace; font-size:11px; margin-bottom:6px; border-radius:6px; padding:8px; line-height:1.4;" placeholder="background: #1e293b;&#10;border: 2px solid #6366f1;&#10;&#10;:scope .label { color: gold; }">${cssVal}</textarea>
+          <button type="button" onclick="window.__editor.updatePanelCSS(document.getElementById('panel-custom-css').value)" style="width:100%;">Применить CSS</button>
         </div>
       `;
 
@@ -92,13 +101,12 @@ export function renderInspector() {
             html += `
         <hr style="border-color:#3c3c3c; margin: 12px 0;">
         <div class="prop-group">
-          <h3>UI (стандартные DOM)</h3>
-          <button onclick="window.__editor.addUIElement('text')" style="margin-top:6px;">+ Текст (div)</button>
-          <button onclick="window.__editor.addUIElement('button')">+ &lt;button&gt;</button>
-          <button onclick="window.__editor.addUIElement('input')">+ &lt;input&gt;</button>
-          <button onclick="window.__editor.addUIElement('image')">+ &lt;img&gt;</button>
-          <button onclick="window.__editor.addUIElement('video')">+ &lt;video&gt;</button>
-          <button onclick="window.__editor.addUIElement('html')">+ HTML</button>
+          <h3>UI Компоненты Панели</h3>
+          <button onclick="window.__editor.addUIElement('text')" style="margin-top:6px;">+ Текст</button>
+          <button onclick="window.__editor.addUIElement('button')">+ Кнопка</button>
+          <button onclick="window.__editor.addUIElement('input')">+ Поле ввода</button>
+          <button onclick="window.__editor.addUIElement('image')">+ Image</button>
+          <button onclick="window.__editor.addUIElement('video')">+ Video</button>
         </div>
         <div id="ui-elements-list"></div>
       `;
@@ -186,80 +194,45 @@ function renderUIElementsList() {
     let html = '';
 
     elements.forEach((el, index) => {
-        const box = (title, body) => `
+        if (el.type === 'video') {
+            html += `
           <div style="background:rgba(15,23,42,.8); padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid var(--border);">
-            <label style="color:#a5b4fc; font-weight:600;">${title}</label>
-            ${body}
-            <button class="btn-danger" style="font-size:11px; padding:4px 8px; margin-top:6px;" onclick="window.__editor.removeUIElement(${index})">Удалить</button>
-          </div>`;
-
-        if (el.type === 'button') {
-            html += box('&lt;button&gt;', `
-            <label>Текст</label>
-            <input type="text" value="${(el.text || '').replace(/"/g, '&quot;')}" onchange="window.__editor.updateUIElement(${index}, 'text', this.value)">
-            <div class="row">
-              <div><label>Размер (px)</label><input type="number" value="${el.fontSize || 14}" onchange="window.__editor.updateUIElement(${index}, 'fontSize', this.value)"></div>
-              <div><label>Фон (HEX/#)</label><input type="text" value="${el.btnBg || '#10b981'}" onchange="window.__editor.updateUIElement(${index}, 'btnBg', this.value)"></div>
-            </div>
-            <label>Цвет текста</label>
-            <input type="text" value="${el.color || '#ffffff'}" onchange="window.__editor.updateUIElement(${index}, 'color', this.value)">
-            `);
-        } else if (el.type === 'input') {
-            html += box('&lt;input&gt;', `
-            <label>Placeholder</label>
-            <input type="text" value="${(el.text || '').replace(/"/g, '&quot;')}" onchange="window.__editor.updateUIElement(${index}, 'text', this.value)">
-            <label>Value</label>
-            <input type="text" value="${(el.value || '').replace(/"/g, '&quot;')}" onchange="window.__editor.updateUIElement(${index}, 'value', this.value)">
-            <div class="row">
-              <div><label>Тип</label>
-                <select onchange="window.__editor.updateUIElement(${index}, 'inputType', this.value)">
-                  <option value="text" ${el.inputType === 'text' || !el.inputType ? 'selected' : ''}>text</option>
-                  <option value="number" ${el.inputType === 'number' ? 'selected' : ''}>number</option>
-                  <option value="email" ${el.inputType === 'email' ? 'selected' : ''}>email</option>
-                  <option value="password" ${el.inputType === 'password' ? 'selected' : ''}>password</option>
-                </select>
-              </div>
-              <div><label>Размер (px)</label><input type="number" value="${el.fontSize || 14}" onchange="window.__editor.updateUIElement(${index}, 'fontSize', this.value)"></div>
-            </div>
-            `);
-        } else if (el.type === 'image') {
-            html += box('&lt;img&gt;', `
-            <label>src</label>
-            <input type="text" value="${el.src || ''}" onchange="window.__editor.updateUIElement(${index}, 'src', this.value)">
-            <label>alt</label>
-            <input type="text" value="${(el.alt || '').replace(/"/g, '&quot;')}" onchange="window.__editor.updateUIElement(${index}, 'alt', this.value)">
-            <div class="row">
-              <div><label>Ширина (px)</label><input type="number" value="${el.width || 80}" onchange="window.__editor.updateUIElement(${index}, 'width', this.value)"></div>
-              <div><label>Высота (px)</label><input type="number" value="${el.height || 60}" onchange="window.__editor.updateUIElement(${index}, 'height', this.value)"></div>
-            </div>
-            `);
-        } else if (el.type === 'video') {
-            html += box('&lt;video&gt;', `
-            <label>src (URL)</label>
+            <label>Тип: video</label>
+            <label>Источник (URL)</label>
             <input type="text" value="${el.src || ''}" onchange="window.__editor.updateUIElement(${index}, 'src', this.value)">
             <label>Подпись</label>
-            <input type="text" value="${(el.label || '').replace(/"/g, '&quot;')}" onchange="window.__editor.updateUIElement(${index}, 'label', this.value)">
-            `);
+            <input type="text" value="${el.label || ''}" onchange="window.__editor.updateUIElement(${index}, 'label', this.value)">
+            <button class="btn-danger" style="font-size:11px; padding:4px 8px;" onclick="window.__editor.removeUIElement(${index})">Удалить</button>
+          </div>
+        `;
+        } else if (el.type === 'image') {
+            html += `
+          <div style="background:rgba(15,23,42,.8); padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid var(--border);">
+            <label>Тип: image</label>
+            <label>Источник</label>
+            <input type="text" value="${el.src || ''}" onchange="window.__editor.updateUIElement(${index}, 'src', this.value)">
+            <button class="btn-danger" style="font-size:11px; padding:4px 8px;" onclick="window.__editor.removeUIElement(${index})">Удалить</button>
+          </div>
+        `;
         } else if (el.type === 'html') {
-            html += box('HTML-блок', `
+            html += `
+          <div style="background:rgba(15,23,42,.8); padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid var(--border);">
+            <label>Тип: other html</label>
             <textarea rows="3" style="width:100%; background:#3c3c3c; border:1px solid #555; color:#fff; font-size:11px; margin-bottom:8px; border-radius:2px; padding:4px 6px;" onchange="window.__editor.updateUIElement(${index}, 'html', this.value)">${(el.html || '').replace(/</g, '&lt;')}</textarea>
-            `);
+            <button class="btn-danger" style="font-size:11px; padding:4px 8px;" onclick="window.__editor.removeUIElement(${index})">Удалить</button>
+          </div>
+        `;
         } else {
-            // text / label
-            html += box(`&lt;div class="ui-text"&gt; (${el.type})`, `
-            <label>Текст</label>
-            <input type="text" value="${(el.text || '').replace(/"/g, '&quot;')}" onchange="window.__editor.updateUIElement(${index}, 'text', this.value)">
+            html += `
+          <div style="background:rgba(15,23,42,.8); padding:10px; margin-bottom:8px; border-radius:8px; border:1px solid var(--border);">
+            <label>Тип: ${el.type}</label>
+            <input type="text" value="${el.text || ''}" onchange="window.__editor.updateUIElement(${index}, 'text', this.value)">
             <div class="row">
-              <div><label>Размер (px)</label><input type="number" value="${el.fontSize || 16}" onchange="window.__editor.updateUIElement(${index}, 'fontSize', this.value)"></div>
-              <div><label>Цвет</label><input type="text" value="${el.color || '#ffffff'}" onchange="window.__editor.updateUIElement(${index}, 'color', this.value)"></div>
+              <div><label>Размер</label><input type="number" value="${el.fontSize || 16}" onchange="window.__editor.updateUIElement(${index}, 'fontSize', this.value)"></div>
             </div>
-            <label>font-weight</label>
-            <select onchange="window.__editor.updateUIElement(${index}, 'fontWeight', this.value)">
-              <option value="" ${!el.fontWeight ? 'selected' : ''}>normal</option>
-              <option value="bold" ${el.fontWeight === 'bold' ? 'selected' : ''}>bold</option>
-              <option value="600" ${el.fontWeight === '600' ? 'selected' : ''}>600</option>
-            </select>
-            `);
+            <button class="btn-danger" style="font-size:11px; padding:4px 8px;" onclick="window.__editor.removeUIElement(${index})">Удалить</button>
+          </div>
+        `;
         }
     });
     container.innerHTML = html;
@@ -270,13 +243,13 @@ export function addUIElement(type) {
     const elements = selectedObject.userData.panelData.elements;
 
     if (type === 'text') elements.push({ type: 'text', text: 'Новый текст', fontSize: 16, color: '#ffffff' });
-    if (type === 'button') elements.push({ type: 'button', text: 'Кнопка', fontSize: 14, btnBg: '#10b981', color: '#ffffff' });
-    if (type === 'input') elements.push({ type: 'input', text: 'Введите текст...', value: '', inputType: 'text', fontSize: 14 });
-    if (type === 'image') elements.push({ type: 'image', src: '', alt: '', width: 80, height: 60 });
+    if (type === 'button') elements.push({ type: 'button', text: 'Кнопка', fontSize: 14, btnBg: '#00cc66' });
+    if (type === 'input') elements.push({ type: 'input', text: 'Введите текст...', fontSize: 14 });
+    if (type === 'image') elements.push({ type: 'image', src: '', width: 80, height: 60 });
     if (type === 'video') elements.push({ type: 'video', src: '', label: 'Video' });
     if (type === 'html') elements.push({ type: 'html', html: '<div style="color:#fff;padding:8px;">Custom HTML</div>' });
 
-    refreshPanelDOM(selectedObject); // также обновляет innerHTML
+    refreshPanelDOM(selectedObject);
     renderUIElementsList();
 }
 
@@ -286,12 +259,10 @@ export function updateUIElement(index, key, value) {
     if (el) {
         if (key === 'src') {
             el[key] = normalizePath(value);
-        } else if (key === 'fontSize' || key === 'width' || key === 'height') {
-            el[key] = parseInt(value, 10) || 0;
         } else {
-            el[key] = value;
+            el[key] = (key === 'fontSize' || key === 'width' || key === 'height') ? parseInt(value) : value;
         }
-        refreshPanelDOM(selectedObject); // синхронизирует DOM + innerHTML
+        refreshPanelDOM(selectedObject);
     }
 }
 
@@ -300,6 +271,12 @@ export function removeUIElement(index) {
     selectedObject.userData.panelData.elements.splice(index, 1);
     refreshPanelDOM(selectedObject);
     renderUIElementsList();
+}
+
+export function updatePanelCSS(cssText) {
+    if (!selectedObject || selectedObject.userData.type !== 'panel') return;
+    selectedObject.userData.customCSS = cssText || '';
+    applyPanelCustomCSS(selectedObject);
 }
 
 export function updateDesignPanelProp(key, value) {
@@ -371,7 +348,6 @@ export function addObject3D() {
         rotation: '0,0,0'
     });
     addEditableObject(object);
-    // select
     import('./scene.js').then(m => m.selectObject(object));
 }
 

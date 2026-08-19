@@ -27,13 +27,12 @@ export function init3D() {
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
 
-    // CSS2D layer
     css2dRenderer = new THREE.CSS2DRenderer();
     css2dRenderer.setSize(container.clientWidth, container.clientHeight);
     css2dRenderer.domElement.style.position = 'absolute';
     css2dRenderer.domElement.style.top = '0';
     css2dRenderer.domElement.style.left = '0';
-    css2dRenderer.domElement.style.pointerEvents = 'none'; // клики идут в WebGL canvas
+    css2dRenderer.domElement.style.pointerEvents = 'none';
     container.appendChild(css2dRenderer.domElement);
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
@@ -122,9 +121,12 @@ export function deselectObject() {
 export function clearEditableObjects() {
     editableObjects.forEach(obj => {
         scene.remove(obj);
-        // очистка DOM-элементов CSS2D
         if (obj.userData.css2dObject && obj.userData.css2dObject.element) {
             obj.userData.css2dObject.element.remove();
+        }
+        if (obj.userData.cssUid) {
+            const st = document.getElementById('ar-css-' + obj.userData.cssUid);
+            if (st) st.remove();
         }
     });
     editableObjects.length = 0;
@@ -142,6 +144,10 @@ export function removeEditableObject(obj) {
     scene.remove(obj);
     if (obj.userData.css2dObject && obj.userData.css2dObject.element) {
         obj.userData.css2dObject.element.remove();
+    }
+    if (obj.userData.cssUid) {
+        const st = document.getElementById('ar-css-' + obj.userData.cssUid);
+        if (st) st.remove();
     }
 }
 
