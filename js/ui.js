@@ -54,8 +54,8 @@ export class UI {
         position: fixed;
         top: 50%;
         left: 50%;
-        width: min(70vw, 280px);
-        height: min(70vw, 280px);
+        width: min(70vw, 380px);
+        height: min(70vw, 380px);
         transform: translate(-50%, -50%);
         pointer-events: none;
         z-index: 40;
