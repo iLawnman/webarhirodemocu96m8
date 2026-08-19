@@ -1,12 +1,15 @@
+// ===================== app.js =====================
 import { UI } from './ui.js';
 import { ImageRecognition } from './recognition.js';
 import { ARScene } from './arscene.js';
 import { playSound } from "./audio.js";
+import { Settings } from './settings.js';
 
 export class App {
   constructor() {
     this.ui = new UI();
-    this.recognition = new ImageRecognition(this.ui);
+    this.settings = new Settings();
+    this.recognition = null;          // создаём после загрузки settings
     this.arScene = new ARScene(this.ui);
 
     this.xrSession = null;
@@ -24,6 +27,20 @@ export class App {
     // Штора активна с самого старта, пока идёт инициализация
     this.ui.showCurtain();
 
+    // 1. Settings — до всего
+    this.ui.log('Loading settings...', 'info');
+    await this.settings.load();
+    if (this.settings.isLoaded) {
+      this.ui.log(
+          `Settings loaded | unique_targets=${this.settings.uniqueTargets}`,
+          'ok'
+      );
+    } else {
+      this.ui.log('Settings failed to load, using defaults (unique_targets=0)', 'warn');
+    }
+
+    // 2. Recognition (внутри — questManager + policies)
+    this.recognition = new ImageRecognition(this.ui, this.settings);
     await this.recognition.init();
 
     this.ui.onStartAR(() => this.startAR());
@@ -99,7 +116,7 @@ export class App {
     this.recognition.attachInput(this.xrSession, this.arScene);
 
     // Пол установлен (сессия готова) → штора уезжает вверх,
-    // сверху выезжает панель "ИЩИТЕ!" со случайным маркером
+    // сверху выезжает панель "ИЩИТЕ!" со ожидаемым (или случайным) маркером
     this.ui.hideCurtain();
     this.recognition.presentSearchPrompt();
 

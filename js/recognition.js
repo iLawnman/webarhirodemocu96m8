@@ -1,21 +1,30 @@
+// ===================== recognition.js =====================
 import * as THREE from 'three';
 import { createArTargetSync } from './artarget.js';
 import { playSound } from './audio.js';
 import { QuestManager } from './quests.js';
+import { Policies } from './policies.js';
 
 export class ImageRecognition {
-  constructor(ui) {
+  /**
+   * @param {import('./ui.js').UI} ui
+   * @param {import('./settings.js').Settings} settings
+   */
+  constructor(ui, settings) {
     this.ui = ui;
+    this.settings = settings;
+
     /** @type {Array<{bmp: ImageBitmap, name: string, src: string, source: string}>} */
     this.targetBitmaps = [];
     this.trackedMarkers = new Map();
     // waitingImage   — ждём распознавания маркера (показана панель "ИЩИТЕ!" + мигающая рамка)
-    // recognizing    — маркер найден, 2с эффект + сбор поз, arTarget скрыт, якорь ещё не создан
-    // waitingInput   — эффект закончен, якорь готов/создаётся, панель вопроса видна
+    // recognizing    — маркер найден, 2с эффект + сбор поз, якорь ещё не создан
+    // waitingInput   — якорь готов, панель вопроса открыта, ждём ответа
     // showingResult  — ответ дан, показана resultpanel
     this.state = 'waitingImage';
 
     this.questManager = new QuestManager();
+    this.policies = new Policies(settings, this.questManager);
 
     this._raycaster = new THREE.Raycaster();
     this._pointerNdc = new THREE.Vector2(0, 0);
@@ -30,6 +39,7 @@ export class ImageRecognition {
 
   static MANIFEST_URL = './assets/recognitionimages.json';
   static SMOOTH_FACTOR = 0.25;
+  /** Длительность эффекта распознавания (мс) — должна совпадать с UI */
   static RECOG_EFFECT_MS = 2000;
 
   async makeGeneratedBitmap() {
@@ -153,6 +163,13 @@ export class ImageRecognition {
       this.ui.log('Failed to load quest data, falling back to default marker info', 'warn');
     }
 
+    // policies после questManager (нужен currentQuestId и RecognitionImage)
+    this.policies.init();
+    this.ui.log(
+        `Policies mode=${this.policies.mode} | expected="${this.policies.expectedMarker || '—'}"`,
+        'info'
+    );
+
     const list = await this.loadImageList();
 
     if (list && list.length) {
@@ -232,12 +249,23 @@ export class ImageRecognition {
     this._boundOnClick = null;
   }
 
+  /**
+   * Показывает панель "ИЩИТЕ!" + мигающую рамку.
+   * При включённых политиках (mode ≥ 2) показывает ожидаемый маркер, иначе — случайный.
+   */
   presentSearchPrompt(hintText) {
     this.state = 'waitingImage';
     this.ui.hideScanFrame();
     if (!this.targetBitmaps.length) return;
 
-    const pick = this.targetBitmaps[Math.floor(Math.random() * this.targetBitmaps.length)];
+    let pick;
+    if (this.policies.mode >= 2 && this.policies.expectedMarker) {
+      pick = this.targetBitmaps.find(t => t.name === this.policies.expectedMarker)
+          || this.targetBitmaps[0];
+    } else {
+      pick = this.targetBitmaps[Math.floor(Math.random() * this.targetBitmaps.length)];
+    }
+
     this.ui.showQuestStart(pick.src, 'ИЩИТЕ!');
     this.ui.showScanFrameBlink();
   }
@@ -251,6 +279,8 @@ export class ImageRecognition {
     }
     this.trackedMarkers.clear();
     this.state = 'waitingImage';
+
+    this.policies.reset();
 
     this.ui.hideQuestStart();
     this.ui.hideResult();
@@ -316,42 +346,23 @@ export class ImageRecognition {
     }
   }
 
-  /** Полностью скрыть AR-таргет (группа + CSS3D DOM). */
-  _hideArTarget(arTarget) {
-    if (!arTarget) return;
-    const ud = arTarget.userData || {};
-    if (ud.panelEl) {
-      ud.panelEl.style.display = 'none';
-      ud.panelEl.style.visibility = 'hidden';
-      ud.panelEl.style.pointerEvents = 'none';
-    }
-    if (ud.cssObject) {
-      ud.cssObject.visible = false;
-    }
-    arTarget.visible = false;
-  }
-
-  /** Показать AR-таргет после окончания эффекта. */
-  _showArTarget(arTarget) {
-    if (!arTarget) return;
-    const ud = arTarget.userData || {};
-    if (ud.panelEl) {
-      ud.panelEl.style.display = '';
-      ud.panelEl.style.visibility = '';
-      ud.panelEl.style.pointerEvents = 'auto';
-    }
-    if (ud.cssObject) {
-      ud.cssObject.visible = true;
-    }
-    arTarget.visible = true;
-  }
-
   _onQuestionAnswered(entry, value) {
     if (entry.dismissed) return;
     entry.dismissed = true;
 
     if (entry.arTarget) {
-      this._hideArTarget(entry.arTarget);
+      const ud = entry.arTarget.userData || {};
+      if (ud.panelEl) {
+        ud.panelEl.style.display = 'none';
+        if (ud.panelEl.parentNode) {
+          ud.panelEl.parentNode.removeChild(ud.panelEl);
+        }
+      }
+      if (ud.cssObject) {
+        ud.cssObject.visible = false;
+      }
+      entry.arTarget.visible = false;
+
       if (this._arScene && entry.arTarget.parent) {
         this._arScene.scene.remove(entry.arTarget);
       }
@@ -371,6 +382,21 @@ export class ImageRecognition {
         isCorrect ? 'ok' : 'warn'
     );
 
+    // Продвигаем цепочку (strictUnique) до показа реакции
+    if (questId) {
+      const quest = this.questManager.quests.get(questId);
+      if (quest) {
+        const nextId = isCorrect ? quest.RightWayQuest : quest.WrongWayQuest;
+        if (nextId) {
+          this.policies.onQuestAdvanced(nextId);
+          this.ui.log(
+              `[Policy] advanced → ${nextId} | next expected="${this.policies.expectedMarker || '—'}"`,
+              'info'
+          );
+        }
+      }
+    }
+
     const reactionText = this.questManager.getReactionText(questId, isCorrect);
 
     this.ui.showResult(isCorrect, reactionText, () => {
@@ -378,6 +404,9 @@ export class ImageRecognition {
     });
   }
 
+  /**
+   * Усреднение собранных поз → { position, orientation } для createAnchor.
+   */
   _computeStablePose(samples) {
     if (!samples || samples.length === 0) return null;
 
@@ -385,11 +414,13 @@ export class ImageRecognition {
     let px = 0, py = 0, pz = 0;
     let qx = 0, qy = 0, qz = 0, qw = 0;
 
+    // берём последнюю половину сэмплов (более стабильные)
     const start = Math.floor(n / 2);
     const count = n - start;
     for (let i = start; i < n; i++) {
       const s = samples[i];
       px += s.px; py += s.py; pz += s.pz;
+      // простая сумма кватернионов (нормализуем в конце) — ок для близких ориентаций
       qx += s.qx; qy += s.qy; qz += s.qz; qw += s.qw;
     }
     px /= count; py /= count; pz /= count;
@@ -429,6 +460,14 @@ export class ImageRecognition {
           if (this.state !== 'waitingImage') continue;
 
           const markerName = this.getMarkerName(idx);
+
+          // ── Policies gate ──
+          const policyCheck = this.policies.canRecognize(markerName);
+          if (!policyCheck.ok) {
+            this.ui.log(`[Policy] REJECT "${markerName}": ${policyCheck.reason}`, 'warn');
+            continue;
+          }
+
           const bitmapEntry = this.targetBitmaps.find(t => t.name === markerName);
           const questData = this.questManager.getArTargetData(markerName);
 
@@ -464,7 +503,7 @@ export class ImageRecognition {
             continue;
           }
 
-          // поза сразу, но таргет ПОЛНОСТЬЮ скрыт до конца эффекта
+          // сразу ставим позу, но скрываем до конца эффекта
           const t0 = pose.transform;
           if (t0.position) {
             arTarget.position.set(t0.position.x, t0.position.y, t0.position.z);
@@ -475,7 +514,7 @@ export class ImageRecognition {
                 t0.orientation.z, t0.orientation.w
             );
           }
-          this._hideArTarget(arTarget);
+          arTarget.visible = false;
 
           arScene.scene.add(arTarget);
 
@@ -487,6 +526,7 @@ export class ImageRecognition {
             questData,
             anchor: null,
             anchorCreating: false,
+            // фаза распознавания
             recognizing: true,
             recogStart: now,
             poseSamples: [],
@@ -495,13 +535,17 @@ export class ImageRecognition {
           };
           this.trackedMarkers.set(idx, entry);
 
-          // UI: прячем «ИЩИТЕ!», только сканирование 2с
+          // StepByStep: помечаем маркер использованным сразу при старте flow
+          this.policies.onRecognized(markerName);
+
+          // UI: сразу прячем «ИЩИТЕ!», запускаем 2с эффект
           this.state = 'recognizing';
           this.ui.hideQuestStart();
-          this.ui.log('[' + idx + '] Marker found → recognizing (scan only, arTarget hidden)', 'ok');
+          this.ui.log('[' + idx + '] Marker found → recognizing (2s effect)', 'ok');
           playSound('click');
 
           this.ui.playScanEffect(() => {
+            // эффект закончился → обрабатываем собранные позы
             const e = this.trackedMarkers.get(idx);
             if (!e || e.dismissed) return;
 
@@ -509,11 +553,13 @@ export class ImageRecognition {
             e.pendingAnchorPose = this._computeStablePose(e.poseSamples);
             e.recognizing = false;
 
-            // ТОЛЬКО ТЕПЕРЬ показываем arTarget
-            this._showArTarget(e.arTarget);
+            // показываем AR-таргет
+            if (e.arTarget) {
+              e.arTarget.visible = true;
+            }
 
             this.state = 'waitingInput';
-            this.ui.log('[' + idx + '] Effect done → show arTarget, waitingInput', 'ok');
+            this.ui.log('[' + idx + '] Effect done → waitingInput (anchor next frame)', 'ok');
             this.ui.log('state → waitingInput', 'info');
           });
         }
@@ -526,7 +572,7 @@ export class ImageRecognition {
         const target = entry.arTarget;
         if (!target || !target.isObject3D) continue;
 
-        // ─── Фаза recognizing: только сбор поз, arTarget скрыт, якорь НЕ создаём ───
+        // ─── Фаза recognizing: только сбор поз, якорь НЕ создаём ───
         if (entry.recognizing || !entry.effectDone) {
           const t = pose.transform;
           const pos = t.position;
@@ -537,24 +583,24 @@ export class ImageRecognition {
               px: pos.x, py: pos.y, pz: pos.z,
               qx: ori.x, qy: ori.y, qz: ori.z, qw: ori.w
             });
+            // ограничиваем буфер
             if (entry.poseSamples.length > 120) {
               entry.poseSamples.shift();
             }
-            // обновляем скрытый таргет (позиция готова к показу)
+            // мягко обновляем скрытый таргет
             target.position.set(pos.x, pos.y, pos.z);
             target.quaternion.set(ori.x, ori.y, ori.z, ori.w);
           }
-          // на всякий случай удерживаем скрытие CSS3D
-          this._hideArTarget(target);
           entry.lastState = trackingState;
           continue;
         }
 
-        // ─── После эффекта: создаём якорь один раз ───
+        // ─── После эффекта: создаём якорь один раз по стабильной позе ───
         if (!entry.anchor && !entry.anchorCreating && typeof frame.createAnchor === 'function') {
           entry.anchorCreating = true;
 
-          let usedAveraged = false;
+          let anchorPose = pose;
+          // если есть усреднённая поза — подставляем её в XRRigidTransform
           if (entry.pendingAnchorPose && typeof XRRigidTransform !== 'undefined') {
             try {
               const p = entry.pendingAnchorPose.position;
@@ -563,9 +609,9 @@ export class ImageRecognition {
                   { x: p.x, y: p.y, z: p.z },
                   { x: o.x, y: o.y, z: o.z, w: o.w }
               );
+              // createAnchor принимает XRRigidTransform
               const createPromise = frame.createAnchor(transform, xrRefSpace);
               if (createPromise && typeof createPromise.then === 'function') {
-                usedAveraged = true;
                 createPromise
                     .then((anchor) => {
                       if (entry && !entry.dismissed) {
@@ -577,43 +623,45 @@ export class ImageRecognition {
                     })
                     .catch((err) => {
                       this.ui.log('[' + idx + '] createAnchor failed: ' + (err?.message || err), 'warn');
+                      // fallback: попробуем с текущим pose
                       entry.anchorCreating = false;
                     })
                     .finally(() => {
                       if (entry) entry.anchorCreating = false;
                     });
                 entry.pendingAnchorPose = null;
+                entry.lastState = trackingState;
+                continue;
               }
             } catch (err) {
               this.ui.log('[' + idx + '] XRRigidTransform/anchor error: ' + (err?.message || err), 'warn');
             }
           }
 
-          if (!usedAveraged) {
-            const createPromise = frame.createAnchor(pose.transform, xrRefSpace);
-            if (createPromise && typeof createPromise.then === 'function') {
-              createPromise
-                  .then((anchor) => {
-                    if (entry && !entry.dismissed) {
-                      entry.anchor = anchor;
-                      this.ui.log('[' + idx + '] XRAnchor created', 'ok');
-                    } else if (anchor && typeof anchor.delete === 'function') {
-                      try { anchor.delete(); } catch (_) {}
-                    }
-                  })
-                  .catch((err) => {
-                    this.ui.log('[' + idx + '] createAnchor failed: ' + (err?.message || err), 'warn');
-                  })
-                  .finally(() => {
-                    if (entry) entry.anchorCreating = false;
-                  });
-            } else {
-              entry.anchorCreating = false;
-            }
+          // fallback — якорь из текущего image pose
+          const createPromise = frame.createAnchor(pose.transform, xrRefSpace);
+          if (createPromise && typeof createPromise.then === 'function') {
+            createPromise
+                .then((anchor) => {
+                  if (entry && !entry.dismissed) {
+                    entry.anchor = anchor;
+                    this.ui.log('[' + idx + '] XRAnchor created', 'ok');
+                  } else if (anchor && typeof anchor.delete === 'function') {
+                    try { anchor.delete(); } catch (_) {}
+                  }
+                })
+                .catch((err) => {
+                  this.ui.log('[' + idx + '] createAnchor failed: ' + (err?.message || err), 'warn');
+                })
+                .finally(() => {
+                  if (entry) entry.anchorCreating = false;
+                });
+          } else {
+            entry.anchorCreating = false;
           }
         }
 
-        // ─── Обновление позиции ───
+        // ─── Обновление позиции (якорь или сглаженный tracking) ───
         let usePose = pose;
         if (entry.anchor && entry.anchor.anchorSpace) {
           const anchorPose = frame.getPose(entry.anchor.anchorSpace, xrRefSpace);
@@ -653,6 +701,7 @@ export class ImageRecognition {
         }
       }
 
+      // ─── Потеря трекинга ───
       for (const [idx, entry] of this.trackedMarkers) {
         if (!seen.has(idx) && entry.lastState !== 'lost') {
           entry.lastState = 'lost';
