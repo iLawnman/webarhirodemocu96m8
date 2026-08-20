@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+import { CSS3DObject } from './CSS3DRenderer.js';
 
 const DEFAULT_PREFAB_URL = './assets/artargetprefab.html';
 
