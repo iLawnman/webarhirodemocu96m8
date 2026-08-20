@@ -59,6 +59,11 @@ export class App {
     this.arScene.renderer.setAnimationLoop((timestamp, frame) => {
       this.onXRFrame(timestamp, frame);
     });
+
+    // Активируем UI и снимаем блокирующую шторку после завершения всей инициализации
+    this.ui.enableArButton();
+    this.ui.hideCurtain();
+    this.ui.setHint('Нажмите Start AR для запуска');
   }
 
   async startAR() {
