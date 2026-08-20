@@ -1,10 +1,12 @@
 import * as THREE from 'three';
-import { createArTargetSync } from './artarget.js';
-import { playSound } from './audio.js';
+import { ImageReco } from './imagereco.js';
 import { QuestManager } from './quests.js';
 import { Policies } from './policies.js';
-import { ImageReco } from './imagereco.js';
-import { MediaPipeReco } from './mediapipe.js';
+import { MediaPipeService } from './mediapipe.js';
+import { MediaPipeReco } from './mediapipereco.js';
+import { createArTarget } from './artarget.js';
+import { Scanner3DObject } from './scanner3dobject.js';
+import { playSound } from './audio.js';
 
 export class ImageRecognition {
   /**
@@ -16,374 +18,255 @@ export class ImageRecognition {
     this.settings = settings;
 
     this.questManager = new QuestManager();
-    this.policies = new Policies(settings, this.questManager);
+    this.policies = new Policies(this.settings, this.questManager);
 
-    this.imageReco = new ImageReco(ui, settings, this.questManager, this.policies);
-    this.mediaPipeReco = new MediaPipeReco(ui);
+    this.imageReco = new ImageReco(
+      this.ui,
+      this.settings,
+      this.questManager,
+      this.policies
+    );
 
-    this.state = 'waitingImage';
+    this.mediaPipeService = new MediaPipeService(this.ui);
+    this.mediaPipeReco = new MediaPipeReco(this.ui, this.mediaPipeService);
 
-    this._raycaster = new THREE.Raycaster();
-    this._pointerNdc = new THREE.Vector2(0, 0);
-    this._boundOnSelect = null;
-    this._boundOnClick = null;
-    this._arScene = null;
-    this._xrSession = null;
+    this.trackedMarkers = new Map();
+    this.xrSession = null;
 
     this._tmpPos = new THREE.Vector3();
     this._tmpQuat = new THREE.Quaternion();
+
+    this.SCANNED_FRAMES_THRESHOLD = 120;
   }
 
   async init() {
-    this.state = 'waitingImage';
+    this.ui.log('Initializing ImageRecognition...', 'info');
 
-    this.ui.log('Loading quest table & answers...', 'info');
     await this.questManager.loadData();
     if (this.questManager.isLoaded) {
-      this.ui.log(`Quest data loaded: ${this.questManager.quests.size} quests`, 'ok');
+      this.ui.log('Quests & Answers loaded successfully', 'ok');
+    } else {
+      this.ui.log('Quests load failed/fallback mode', 'warn');
     }
 
     this.policies.init();
-    await this.imageReco.init();
 
-    this.ui.enableArButton();
-    this.ui.log('state → waitingImage | ready', 'info');
+    await this.imageReco.init();
+    await this.mediaPipeService.init();
+
+    this.ui.log('ImageRecognition fully initialized', 'ok');
   }
 
   getTrackedImages(widthInMeters = 0.2) {
     return this.imageReco.getTrackedImages(widthInMeters);
   }
 
-  attachInput(xrSession, arScene) {
-    this._xrSession = xrSession;
-    this._arScene = arScene;
-
-    this._boundOnSelect = (ev) => this._onSelect(ev);
-    xrSession.addEventListener('select', this._boundOnSelect);
-
-    this._boundOnClick = (ev) => this._onCanvasTap(ev);
-    arScene.renderer.domElement.addEventListener('click', this._boundOnClick);
-    arScene.renderer.domElement.addEventListener('touchend', this._boundOnClick, { passive: true });
+  attachInput(session, arScene) {
+    this.xrSession = session;
   }
 
   detachInput() {
-    if (this._xrSession && this._boundOnSelect) {
-      this._xrSession.removeEventListener('select', this._boundOnSelect);
-    }
-    if (this._arScene && this._boundOnClick) {
-      this._arScene.renderer.domElement.removeEventListener('click', this._boundOnClick);
-      this._arScene.renderer.domElement.removeEventListener('touchend', this._boundOnClick);
-    }
-    this._xrSession = null;
-    this._arScene = null;
-    this._boundOnSelect = null;
-    this._boundOnClick = null;
+    this.xrSession = null;
   }
 
   presentSearchPrompt() {
-    this.state = 'waitingImage';
-    this.ui.hideScanFrame();
-    if (!this.imageReco.targetBitmaps.length) return;
-
-    let pick;
-    if (this.policies.mode >= 2 && this.policies.expectedMarker) {
-      pick = this.imageReco.targetBitmaps.find(t => t.name === this.policies.expectedMarker)
-          || this.imageReco.targetBitmaps[0];
+    const expected = this.policies.expectedMarker;
+    if (expected) {
+      this.ui.setHint(`Наведите камеру на маркер: ${expected}`);
     } else {
-      pick = this.imageReco.targetBitmaps[Math.floor(Math.random() * this.imageReco.targetBitmaps.length)];
+      this.ui.setHint('Наведите камеру на любой маркер');
     }
-
-    this.ui.showQuestStart(pick.src, 'ИЩИТЕ!');
-    this.ui.showScanFrameBlink();
   }
 
   reset(arScene) {
-    for (const [, entry] of this.imageReco.trackedMarkers) {
-      if (entry.arTarget && arScene) {
-        arScene.scene.remove(entry.arTarget);
-      }
-      this.imageReco.disposeEntry(entry);
+    for (const [idx, entry] of this.trackedMarkers.entries()) {
+      this.disposeEntry(entry, arScene);
     }
-    this.imageReco.trackedMarkers.clear();
-
-    this.mediaPipeReco.clear(arScene);
-
-    this.state = 'waitingImage';
+    this.trackedMarkers.clear();
     this.policies.reset();
-
-    this.ui.hideQuestStart();
-    this.ui.hideResult();
-    this.ui.hideScanFrame();
-    this.ui.hideDetectedObjectsInfo();
+    this.mediaPipeReco.clear(arScene);
   }
 
-  _onSelect(ev) {
-    if (this.state !== 'waitingInput' || !this._arScene) return;
-    this._pointerNdc.set(0, 0);
-    this._tryHitOk();
-  }
+  /**
+   * Основной цикл процессинга трекинга WebXR кадра
+   */
+  processTracking(frame, refSpace, frameCount, arScene) {
+    const results = frame.getImageTrackingResults ? frame.getImageTrackingResults() : [];
 
-  _onCanvasTap(ev) {
-    if (this.state !== 'waitingInput' || !this._arScene) return;
-    const rect = this._arScene.renderer.domElement.getBoundingClientRect();
-    let clientX = ev.changedTouches ? ev.changedTouches[0].clientX : ev.clientX;
-    let clientY = ev.changedTouches ? ev.changedTouches[0].clientY : ev.clientY;
+    for (const result of results) {
+      const idx = result.index;
+      const markerName = this.imageReco.getMarkerName(idx);
+      const state = result.trackingState;
 
-    this._pointerNdc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-    this._pointerNdc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-    this._tryHitOk();
-  }
+      let entry = this.trackedMarkers.get(idx);
 
-  _tryHitOk() {
-    if (!this._arScene) return;
-    const camera = this._arScene.camera;
-    if (!camera) return;
-    this._raycaster.setFromCamera(this._pointerNdc, camera);
+      if (state === 'tracked') {
+        const pose = frame.getPose(result.imageSpace, refSpace);
+        if (!pose) continue;
 
-    for (const [, entry] of this.imageReco.trackedMarkers) {
-      if (!entry.arTarget || !entry.arTarget.visible || entry.dismissed) continue;
-      const ud = entry.arTarget.userData || {};
-      // ud.okPanel / ud.okButton — легаси-имена из СТАРОЙ (canvas-mesh)
-      // версии ModelFactory. Текущий artarget.js (CSS3D) их не создаёт —
-      // панели там называются LeftHelpBlock/MainBlock/RightBlock/ButtonsBlock
-      // и являются CSS3DObject, а не THREE.Mesh. У CSS3DObject нет geometry,
-      // поэтому raycaster в принципе не может его "увидеть" — даже с
-      // правильным именем эта проверка никогда бы не срабатывала.
-      // Раньше `if (!okPanel) continue;` было true всегда → весь цикл был
-      // мёртвым кодом, ни для одного маркера точный хит-тест не выполнялся.
-      //
-      // Вместо этого raycast'им сферу-маркер (ud.sphere) — она настоящий
-      // Mesh и есть у каждого таргета. Это грубый "тапнули по маркеру"-хит
-      // для XR select / прямого тапа по canvas; выбор КОНКРЕТНОЙ кнопки
-      // (Slide/Button/InputField) идёт через родные DOM-клики на кнопках
-      // внутри ButtonsBlock (см. _buildQuestionBody в artarget.js) —
-      // это отдельный, независимый путь, если он не срабатывает — дело не
-      // в raycaster'е, а в доставке кликов до DOM (см. app.js / dom-overlay).
-      const sphere = ud.sphere;
-      if (!sphere) continue;
-      const hits = this._raycaster.intersectObject(sphere, false);
-      if (hits.length > 0) {
-        this._handleOk(entry);
-        return;
-      }
-    }
+        const pos = pose.transform.position;
+        const ori = pose.transform.orientation;
 
-    if (this.state === 'waitingInput') {
-      for (const [, entry] of this.imageReco.trackedMarkers) {
-        if (entry.arTarget && entry.arTarget.visible && !entry.dismissed) {
-          this._handleOk(entry);
-          return;
+        if (!entry) {
+          const check = this.policies.canRecognize(markerName);
+          if (!check.ok) {
+            this.ui.log(`Policy block [${markerName}]: ${check.reason}`, 'warn');
+            continue;
+          }
+
+          entry = {
+            markerName,
+            bitmapEntry: this.imageReco.targetBitmaps[idx],
+            samples: [],
+            scannedFrames: 0,
+            isStable: false,
+            scannerObject: null,
+            arTarget: null,
+            anchor: null
+          };
+
+          this.trackedMarkers.set(idx, entry);
+          this.policies.onRecognized(markerName);
+
+          this.ui.log(`Started scanning marker: ${markerName}`, 'info');
+          playSound('scan_start');
+        }
+
+        if (!entry.isStable) {
+          entry.samples.push({
+            px: pos.x, py: pos.y, pz: pos.z,
+            qx: ori.x, qy: ori.y, qz: ori.z, qw: ori.w
+          });
+
+          if (!entry.scannerObject) {
+            const scanner = new Scanner3DObject({ radius: 0.1, color: 0x00ffaa });
+            const obj3D = scanner.getObject3D();
+            obj3D.position.set(pos.x, pos.y, pos.z);
+            obj3D.quaternion.set(ori.x, ori.y, ori.z, ori.w);
+
+            arScene.scene.add(obj3D);
+            entry.scannerObject = scanner;
+          } else {
+            const obj3D = entry.scannerObject.getObject3D();
+            obj3D.position.set(pos.x, pos.y, pos.z);
+            obj3D.quaternion.set(ori.x, ori.y, ori.z, ori.w);
+          }
+
+          entry.scannedFrames++;
+          const progress = Math.min(100, Math.floor((entry.scannedFrames / this.SCANNED_FRAMES_THRESHOLD) * 100));
+          entry.scannerObject.updateProgress(progress);
+
+          if (entry.scannedFrames >= this.SCANNED_FRAMES_THRESHOLD) {
+            entry.isStable = true;
+            this.ui.log(`Marker ${markerName} successfully scanned & stabilized!`, 'ok');
+            playSound('scan_success');
+
+            if (entry.scannerObject) {
+              arScene.scene.remove(entry.scannerObject.getObject3D());
+              entry.scannerObject.dispose();
+              entry.scannerObject = null;
+            }
+
+            const stablePose = this.imageReco.computeStablePose(entry.samples);
+            this.createTargetObject(entry, stablePose, arScene);
+          }
+        } else if (entry.arTarget) {
+          // Если таргет уже создан и активен, плавно подтягиваем его к текущему трекингу маркера
+          this._tmpPos.set(pos.x, pos.y, pos.z);
+          this._tmpQuat.set(ori.x, ori.y, ori.z, ori.w);
+
+          entry.arTarget.position.lerp(this._tmpPos, ImageReco.SMOOTH_FACTOR);
+          entry.arTarget.quaternion.slerp(this._tmpQuat, ImageReco.SMOOTH_FACTOR);
+
+          this.mediaPipeReco.processDetection(entry, arScene);
+        }
+
+      } else if (state === 'emulated') {
+        if (entry && entry.arTarget) {
+          // Во время эмуляции оставляем таргет видимым в зафиксированной позиции
         }
       }
     }
   }
 
-  _handleOk(entry) {
-    if (entry.dismissed) return;
-    const type = entry.questData?.answerType;
-    if (type === 'Art' || type === 'AntiArt' || !type) {
-      this._onQuestionAnswered(entry, true);
+  async createTargetObject(entry, stablePose, arScene) {
+    const targetData = this.questManager.getArTargetData(entry.markerName);
+
+    const onAnswerHandler = (userAnswer) => {
+      this.handleUserAnswer(entry, targetData.questId, userAnswer, arScene);
+    };
+
+    const targetGroup = await createArTarget(targetData, {
+      onAnswer: onAnswerHandler
+    });
+
+    if (stablePose) {
+      targetGroup.position.set(
+        stablePose.position.x,
+        stablePose.position.y,
+        stablePose.position.z
+      );
+      targetGroup.quaternion.set(
+        stablePose.orientation.x,
+        stablePose.orientation.y,
+        stablePose.orientation.z,
+        stablePose.orientation.w
+      );
     }
+
+    // Включаем видимость объекта строго ПОСЛЕ полного завершения сканирования и создания
+    targetGroup.visible = true;
+
+    // Включаем pointer-events на DOM-элементах CSS3DObject
+    targetGroup.traverse((obj) => {
+      if (obj.element) {
+        obj.element.style.pointerEvents = 'auto';
+      }
+    });
+
+    arScene.scene.add(targetGroup);
+    entry.arTarget = targetGroup;
+
+    this.ui.setHint(`Ответьте на вопрос: ${targetData.title || entry.markerName}`);
   }
 
-  _onQuestionAnswered(entry, value) {
-    if (entry.dismissed) return;
-    entry.dismissed = true;
-
-    if (entry.arTarget) {
-      entry.arTarget.visible = false;
-      if (this._arScene && entry.arTarget.parent) {
-        this._arScene.scene.remove(entry.arTarget);
-      }
-    }
-
-    const questData = entry.questData;
-    const questId = questData?.questId;
-
-    let isCorrect = true;
-    if (questId && this.questManager.quests.has(questId)) {
-      isCorrect = this.questManager.validateAnswer(questId, value);
-    }
-
-    this.state = 'showingResult';
-
-    if (questId) {
-      const quest = this.questManager.quests.get(questId);
-      if (quest) {
-        const nextId = isCorrect ? quest.RightWayQuest : quest.WrongWayQuest;
-        if (nextId) this.policies.onQuestAdvanced(nextId);
-      }
-    }
-
+  handleUserAnswer(entry, questId, userAnswer, arScene) {
+    const isCorrect = this.questManager.validateAnswer(questId, userAnswer);
     const reactionText = this.questManager.getReactionText(questId, isCorrect);
-    this.ui.showResult(isCorrect, reactionText, () => {
+
+    this.ui.log(`Answer for ${questId}: ${userAnswer} | Correct: ${isCorrect}`, isCorrect ? 'ok' : 'warn');
+
+    if (isCorrect) {
+      playSound('correct');
+    } else {
+      playSound('wrong');
+    }
+
+    this.ui.showResultPanel(reactionText, isCorrect, () => {
+      const quest = this.questManager.quests.get(questId);
+      const nextQuestId = isCorrect
+        ? (quest?.RightWayQuest || quest?.NextWayQuest)
+        : (quest?.WrongWayQuest || quest?.NextWayQuest);
+
+      this.policies.onQuestAdvanced(nextQuestId);
+      this.disposeEntry(entry, arScene);
       this.presentSearchPrompt();
     });
   }
 
-  processTracking(frame, xrRefSpace, frameCount, arScene) {
-    try {
-      if (!frame || typeof frame.getImageTrackingResults !== 'function') return;
+  disposeEntry(entry, arScene) {
+    if (!entry) return;
 
-      const results = frame.getImageTrackingResults();
-      if (!results) return;
-
-      const seen = new Set();
-
-      for (const result of results) {
-        if (!result) continue;
-
-        const trackingState = result.trackingState;
-        const idx = result.index;
-        seen.add(idx);
-
-        const pose = frame.getPose(result.imageSpace, xrRefSpace);
-        if (!pose || !pose.transform) continue;
-
-        let entry = this.imageReco.trackedMarkers.get(idx);
-
-        if (!entry) {
-          if (this.state !== 'waitingImage') continue;
-
-          const markerName = this.imageReco.getMarkerName(idx);
-          const policyCheck = this.policies.canRecognize(markerName);
-          if (!policyCheck.ok) continue;
-
-          const bitmapEntry = this.imageReco.targetBitmaps.find(t => t.name === markerName);
-          const questData = this.questManager.getArTargetData(markerName);
-
-          const targetInfoData = {
-            title: questData?.title || markerName,
-            question: questData?.question || questData?.title || markerName,
-            mainText: questData?.mainText || '',
-            answerType: questData?.answerType || 'Slide',
-            options: questData?.options || [],
-            imageSrc: bitmapEntry ? bitmapEntry.src : '',
-            questId: questData?.questId,
-            questData
-          };
-
-          const arTarget = createArTargetSync(targetInfoData, {
-            onAnswer: (value) => {
-              const e = this.imageReco.trackedMarkers.get(idx);
-              if (e) this._onQuestionAnswered(e, value);
-            }
-          });
-
-          arTarget.visible = false;
-          arScene.scene.add(arTarget);
-
-          entry = {
-            arTarget,
-            lastState: trackingState,
-            dismissed: false,
-            questData,
-            markerName,
-            bitmapEntry,
-            anchor: null,
-            anchorCreating: false,
-            recognizing: true,
-            poseSamples: [],
-            effectDone: false,
-            pendingAnchorPose: null
-          };
-
-          this.imageReco.trackedMarkers.set(idx, entry);
-          this.policies.onRecognized(markerName);
-          this.state = 'recognizing';
-
-          this.ui.hideQuestStart();
-          playSound('click');
-
-          this.ui.playScanEffect(() => {
-            const e = this.imageReco.trackedMarkers.get(idx);
-            if (!e || e.dismissed) return;
-
-            e.effectDone = true;
-            e.pendingAnchorPose = this.imageReco.computeStablePose(e.poseSamples);
-            e.recognizing = false;
-
-            if (e.arTarget) e.arTarget.visible = true;
-
-            this.state = 'waitingInput';
-          });
-        }
-
-        if (entry.dismissed) {
-          entry.lastState = trackingState;
-          continue;
-        }
-
-        const target = entry.arTarget;
-        if (!target) continue;
-
-        if (entry.recognizing || !entry.effectDone) {
-          const t = pose.transform;
-          if (t.position && t.orientation) {
-            entry.poseSamples.push({
-              px: t.position.x, py: t.position.y, pz: t.position.z,
-              qx: t.orientation.x, qy: t.orientation.y, qz: t.orientation.z, qw: t.orientation.w
-            });
-            target.position.set(t.position.x, t.position.y, t.position.z);
-            target.quaternion.set(t.orientation.x, t.orientation.y, t.orientation.z, t.orientation.w);
-          }
-          entry.lastState = trackingState;
-          continue;
-        }
-
-        if (!entry.anchor && !entry.anchorCreating && typeof frame.createAnchor === 'function') {
-          entry.anchorCreating = true;
-          const createPromise = frame.createAnchor(pose.transform, xrRefSpace);
-          if (createPromise && typeof createPromise.then === 'function') {
-            createPromise
-                .then((anchor) => { if (entry && !entry.dismissed) entry.anchor = anchor; })
-                .finally(() => { if (entry) entry.anchorCreating = false; });
-          } else {
-            entry.anchorCreating = false;
-          }
-        }
-
-        let usePose = pose;
-        if (entry.anchor && entry.anchor.anchorSpace) {
-          const anchorPose = frame.getPose(entry.anchor.anchorSpace, xrRefSpace);
-          if (anchorPose && anchorPose.transform) usePose = anchorPose;
-        }
-
-        const pos = usePose.transform.position;
-        const ori = usePose.transform.orientation;
-
-        if (pos) {
-          this._tmpPos.set(pos.x, pos.y, pos.z);
-          target.position.lerp(this._tmpPos, ImageReco.SMOOTH_FACTOR);
-        }
-        if (ori) {
-          this._tmpQuat.set(ori.x, ori.y, ori.z, ori.w);
-          target.quaternion.slerp(this._tmpQuat, ImageReco.SMOOTH_FACTOR);
-        }
-
-        entry.lastState = trackingState;
-
-        if (frameCount % 30 === 0) {
-          this.mediaPipeReco.processDetection(entry, arScene);
-        }
-      }
-
-      for (const [idx, entry] of this.imageReco.trackedMarkers) {
-        if (!seen.has(idx) && entry.lastState !== 'lost') {
-          entry.lastState = 'lost';
-          if (entry.arTarget && entry.arTarget.parent) {
-            arScene.scene.remove(entry.arTarget);
-          }
-          this.imageReco.disposeEntry(entry);
-          this.imageReco.trackedMarkers.delete(idx);
-
-          if (!entry.dismissed) {
-            this.presentSearchPrompt('Маркер потерян. Покажите картинку снова.');
-          }
-        }
-      }
-    } catch (e) {
-      // Игнорируем регулярные кадры при потере
+    if (entry.scannerObject) {
+      if (arScene) arScene.scene.remove(entry.scannerObject.getObject3D());
+      entry.scannerObject.dispose();
+      entry.scannerObject = null;
     }
+
+    if (entry.arTarget) {
+      if (arScene) arScene.scene.remove(entry.arTarget);
+    }
+
+    this.imageReco.disposeEntry(entry);
   }
 }
