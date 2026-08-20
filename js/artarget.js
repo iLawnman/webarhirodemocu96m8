@@ -13,6 +13,12 @@ const DEFAULT_PREFAB_URL = './assets/artargetprefab.html';
  * Структура панелей и позиции — в artargetprefab.html.
  * Входные данные: любой объект с полями answers.json / questtable
  * или упрощённый { title, question, mainText, help, imageSrc, options, answerType }.
+ *
+ * Макет (метры, относительно маркера):
+ *   LeftHelpBlock  (-0.14, 0.03, 0)   rot(-90, 12, 0)
+ *   MainBlock      ( 0.00, 0.055, 0)  rot(-90,  0, 0)
+ *   RightBlock     ( 0.14, 0.03, 0)   rot(-90,-12, 0)
+ *   ButtonsBlock   ( 0.00,-0.12, 0)   rot(-90,  0, 0)
  */
 export class ModelFactory {
     /**
@@ -263,18 +269,19 @@ export class ModelFactory {
             root.appendChild(div);
         };
 
+        // Позиции соответствуют макету (увеличины отступы, чтобы не было кучи)
         make(
             'LeftHelpBlock',
             'ar-left-help-block',
-            '-0.115, 0.025, 0',
-            '-90, 16, 0',
+            '-0.14, 0.03, 0',
+            '-90, 12, 0',
             '0.00048',
             '<div class="ar-panel-help" data-field="help"></div>'
         );
         make(
             'MainBlock',
             'ar-main-block',
-            '0, 0.04, 0',
+            '0, 0.055, 0',
             '-90, 0, 0',
             '0.0005',
             `<div class="ar-panel-title" data-field="title"></div>
@@ -284,8 +291,8 @@ export class ModelFactory {
         make(
             'RightBlock',
             'ar-right-block',
-            '0.115, 0.025, 0',
-            '-90, -16, 0',
+            '0.14, 0.03, 0',
+            '-90, -12, 0',
             '0.00048',
             `<img class="ar-panel-image" data-field="imageSrc" alt="" />
        <div class="ar-panel-help" data-field="imageCaption"></div>`
@@ -293,7 +300,7 @@ export class ModelFactory {
         make(
             'ButtonsBlock',
             'ar-buttons-block',
-            '0, -0.085, 0',
+            '0, -0.12, 0',
             '-90, 0, 0',
             '0.0005',
             '<div class="ar-quest-body" data-field="buttons"></div>'

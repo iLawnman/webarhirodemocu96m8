@@ -7,9 +7,15 @@
       Структура AR-таргета (CSS3D).
       Панели всегда присутствуют. Заполнение — из targetData / JSON.
       Позиции и повороты заданы в data-* (метры / градусы).
-      Макет:
+
+      Макет (соответствует ModelFactory fallback):
             [ LeftHelp ]  [ MainBlock ]  [ RightBlock ]
                                 [ ButtonsBlock ]
+
+      LeftHelpBlock  (-0.14, 0.03, 0)   rot(-90, 12, 0)  scale 0.00048
+      MainBlock      ( 0.00, 0.055, 0)  rot(-90,  0, 0)  scale 0.0005
+      RightBlock     ( 0.14, 0.03, 0)   rot(-90,-12, 0)  scale 0.00048
+      ButtonsBlock   ( 0.00,-0.12, 0)   rot(-90,  0, 0)  scale 0.0005
     -->
     <style>
         /* Базовые стили панелей (темы ARSettings могут переопределять) */
@@ -187,8 +193,8 @@
     <div
             class="ar-css3d-panel ar-left-help-block"
             data-name="LeftHelpBlock"
-            data-position="-0.115, 0.025, 0"
-            data-rotation="-90, 16, 0"
+            data-position="-0.14, 0.03, 0"
+            data-rotation="-90, 12, 0"
             data-scale="0.00048"
     >
         <div class="ar-panel-help" data-field="help"></div>
@@ -198,7 +204,7 @@
     <div
             class="ar-css3d-panel ar-main-block"
             data-name="MainBlock"
-            data-position="0, 0.04, 0"
+            data-position="0, 0.055, 0"
             data-rotation="-90, 0, 0"
             data-scale="0.0005"
     >
@@ -211,8 +217,8 @@
     <div
             class="ar-css3d-panel ar-right-block"
             data-name="RightBlock"
-            data-position="0.115, 0.025, 0"
-            data-rotation="-90, -16, 0"
+            data-position="0.14, 0.03, 0"
+            data-rotation="-90, -12, 0"
             data-scale="0.00048"
     >
         <img class="ar-panel-image" data-field="imageSrc" alt="" />
@@ -223,7 +229,7 @@
     <div
             class="ar-css3d-panel ar-buttons-block"
             data-name="ButtonsBlock"
-            data-position="0, -0.085, 0"
+            data-position="0, -0.12, 0"
             data-rotation="-90, 0, 0"
             data-scale="0.0005"
     >
