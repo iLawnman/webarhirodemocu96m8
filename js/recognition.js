@@ -143,9 +143,25 @@ export class ImageRecognition {
     for (const [, entry] of this.imageReco.trackedMarkers) {
       if (!entry.arTarget || !entry.arTarget.visible || entry.dismissed) continue;
       const ud = entry.arTarget.userData || {};
-      const okPanel = ud.okPanel || ud.okButton || (ud.panels && ud.panels.okPanel);
-      if (!okPanel) continue;
-      const hits = this._raycaster.intersectObject(okPanel, false);
+      // ud.okPanel / ud.okButton — легаси-имена из СТАРОЙ (canvas-mesh)
+      // версии ModelFactory. Текущий artarget.js (CSS3D) их не создаёт —
+      // панели там называются LeftHelpBlock/MainBlock/RightBlock/ButtonsBlock
+      // и являются CSS3DObject, а не THREE.Mesh. У CSS3DObject нет geometry,
+      // поэтому raycaster в принципе не может его "увидеть" — даже с
+      // правильным именем эта проверка никогда бы не срабатывала.
+      // Раньше `if (!okPanel) continue;` было true всегда → весь цикл был
+      // мёртвым кодом, ни для одного маркера точный хит-тест не выполнялся.
+      //
+      // Вместо этого raycast'им сферу-маркер (ud.sphere) — она настоящий
+      // Mesh и есть у каждого таргета. Это грубый "тапнули по маркеру"-хит
+      // для XR select / прямого тапа по canvas; выбор КОНКРЕТНОЙ кнопки
+      // (Slide/Button/InputField) идёт через родные DOM-клики на кнопках
+      // внутри ButtonsBlock (см. _buildQuestionBody в artarget.js) —
+      // это отдельный, независимый путь, если он не срабатывает — дело не
+      // в raycaster'е, а в доставке кликов до DOM (см. app.js / dom-overlay).
+      const sphere = ud.sphere;
+      if (!sphere) continue;
+      const hits = this._raycaster.intersectObject(sphere, false);
       if (hits.length > 0) {
         this._handleOk(entry);
         return;

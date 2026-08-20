@@ -122,6 +122,27 @@ export class App {
     await this.arScene.renderer.xr.setSession(this.xrSession);
     this.ui.log('Renderer session set (WebGL + local-floor)', 'ok');
 
+    // ВАЖНО: кнопки в ButtonsBlock — это обычные DOM-элементы (CSS3DObject).
+    // Чтобы они вообще получали клики ВНУТРИ immersive-ar сессии, браузер
+    // должен реально предоставить фичу 'dom-overlay' — без неё обычный DOM
+    // (весь ваш CSS3D-слой) во время сессии не композитится и не кликабелен,
+    // независимо от z-index/pointer-events в CSS. dom-overlay запрошен как
+    // optionalFeatures — сессия успешно стартует, даже если браузер тихо
+    // проигнорировал эту фичу, и тогда кнопки физически не смогут получать
+    // клики. Логируем реальное состояние, чтобы это было видно, а не молча
+    // считалось "работает".
+    const domOverlayType = this.xrSession.domOverlayState?.type;
+    if (domOverlayType) {
+      this.ui.log(`dom-overlay ГРАНТОВАН, type="${domOverlayType}" — CSS3D-кнопки должны получать клики`, 'ok');
+    } else {
+      this.ui.log(
+          'dom-overlay НЕ гранован браузером (domOverlayState отсутствует) — ' +
+          'CSS3D-кнопки/панели НЕ будут получать клики во время сессии, ' +
+          'это ограничение самого браузера/устройства, а не бага в разметке',
+          'err'
+      );
+    }
+
     this.ui.showEndArButton();
     this.imageTrackingEnabled = true;
 
