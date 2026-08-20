@@ -4,7 +4,7 @@ import { playSound } from './audio.js';
 import { QuestManager } from './quests.js';
 import { Policies } from './policies.js';
 import { ImageReco } from './imagereco.js';
-import { MediaPipeReco } from './mediapipereco.js';
+import { MediaPipeReco } from './mediapipe.js';
 
 export class ImageRecognition {
   /**
