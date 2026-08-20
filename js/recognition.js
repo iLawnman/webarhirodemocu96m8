@@ -10,9 +10,8 @@ export class ImageRecognition {
   /**
    * @param {import('./ui.js').UI} ui
    * @param {import('./settings.js').Settings} settings
-   * @param {import('./mediapipe.js').MediaPipeService} [mediaPipeService]
    */
-  constructor(ui, settings, mediaPipeService = null) {
+  constructor(ui, settings) {
     this.ui = ui;
     this.settings = settings;
 
@@ -20,7 +19,7 @@ export class ImageRecognition {
     this.policies = new Policies(settings, this.questManager);
 
     this.imageReco = new ImageReco(ui, settings, this.questManager, this.policies);
-    this.mediaPipeReco = new MediaPipeReco(ui, mediaPipeService);
+    this.mediaPipeReco = new MediaPipeReco(ui);
 
     this.state = 'waitingImage';
 
@@ -89,7 +88,7 @@ export class ImageRecognition {
     let pick;
     if (this.policies.mode >= 2 && this.policies.expectedMarker) {
       pick = this.imageReco.targetBitmaps.find(t => t.name === this.policies.expectedMarker)
-        || this.imageReco.targetBitmaps[0];
+          || this.imageReco.targetBitmaps[0];
     } else {
       pick = this.imageReco.targetBitmaps[Math.floor(Math.random() * this.imageReco.targetBitmaps.length)];
     }
@@ -321,8 +320,8 @@ export class ImageRecognition {
           const createPromise = frame.createAnchor(pose.transform, xrRefSpace);
           if (createPromise && typeof createPromise.then === 'function') {
             createPromise
-              .then((anchor) => { if (entry && !entry.dismissed) entry.anchor = anchor; })
-              .finally(() => { if (entry) entry.anchorCreating = false; });
+                .then((anchor) => { if (entry && !entry.dismissed) entry.anchor = anchor; })
+                .finally(() => { if (entry) entry.anchorCreating = false; });
           } else {
             entry.anchorCreating = false;
           }
