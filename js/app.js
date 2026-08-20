@@ -5,14 +5,14 @@ import { ARScene } from './arscene.js';
 import { playSound } from "./audio.js";
 import { Settings } from './settings.js';
 import { ARSettings } from './arsettings.js';
-import { MediaPipeService } from './mediapipe.js';
+import { MediaPipeReco } from './mediapipe.js';
 
 export class App {
   constructor() {
     this.ui = new UI();
     this.settings = new Settings();
     this.arSettings = new ARSettings();
-    this.mediaPipeService = new MediaPipeService(this.ui);
+    this.mediaPipeService = new MediaPipeReco(this.ui);
     this.recognition = null;
     this.arScene = new ARScene(this.ui);
 
