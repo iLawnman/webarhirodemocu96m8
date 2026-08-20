@@ -2,10 +2,8 @@ import * as THREE from 'three';
 import { ImageReco } from './imagereco.js';
 import { QuestManager } from './quests.js';
 import { Policies } from './policies.js';
-import { MediaPipeService } from './mediapipe.js';
-import { MediaPipeReco } from './mediapipereco.js';
 import { createArTarget } from './artarget.js';
-import { Scanner3DObject } from './scanner3dobject.js';
+import { Scanner3DObject } from './reco3dobject.js';
 import { playSound } from './audio.js';
 
 export class ImageRecognition {
@@ -27,7 +25,7 @@ export class ImageRecognition {
       this.policies
     );
 
-    this.mediaPipeService = new MediaPipeService(this.ui);
+    this.mediaPipeService = new MediaPipeReco(this.ui);
     this.mediaPipeReco = new MediaPipeReco(this.ui, this.mediaPipeService);
 
     this.trackedMarkers = new Map();
