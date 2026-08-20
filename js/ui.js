@@ -1,3 +1,4 @@
+// ===================== ui.js =====================
 export class UI {
   constructor() {
     this.logPanel = document.getElementById('log-panel');
@@ -7,7 +8,6 @@ export class UI {
     this.hint = document.getElementById('hint');
     this.preview = document.getElementById('target-preview');
 
-    // ── новые панели overlay-флоу ──
     this.curtain = document.getElementById('curtain-panel');
     this.curtainText = document.querySelector('.curtain-text');
 
@@ -20,7 +20,6 @@ export class UI {
     this.resultText = document.getElementById('result-text');
     this.resultCloseBtn = document.getElementById('result-close-btn');
 
-    // Лог стартует свернутым
     this.logVisible = false;
     if (this.logPanel) this.logPanel.classList.add('collapsed');
 
@@ -39,9 +38,9 @@ export class UI {
       });
     }
 
-    // ── Рамка распознавания (создаём сами, без зависимости от HTML) ──
     this._injectScanFrameStyles();
     this.scanFrame = this._createScanFrame();
+    this.recoOverlay = this._createRecoOverlay();
     this._scanEffectTimer = null;
   }
 
@@ -64,7 +63,6 @@ export class UI {
       }
       #ar-scan-frame.visible { display: block; }
 
-      /* углы рамки */
       #ar-scan-frame .corner {
         position: absolute;
         width: 28px;
@@ -78,7 +76,6 @@ export class UI {
       #ar-scan-frame .corner.bl { bottom: 0; left: 0; border-bottom-width: 3px; border-left-width: 3px; border-bottom-left-radius: 4px; }
       #ar-scan-frame .corner.br { bottom: 0; right: 0; border-bottom-width: 3px; border-right-width: 3px; border-bottom-right-radius: 4px; }
 
-      /* мигание в режиме ожидания */
       #ar-scan-frame.blink .corner {
         animation: ar-scan-blink 1.1s ease-in-out infinite;
       }
@@ -87,7 +84,6 @@ export class UI {
         50% { opacity: 1; border-color: #00ffaa; }
       }
 
-      /* эффект распознавания 2с: сканирующая линия + пульс углов + заливка */
       #ar-scan-frame .scan-line {
         position: absolute;
         left: 8%;
@@ -132,6 +128,24 @@ export class UI {
         0%, 100% { opacity: 1; filter: drop-shadow(0 0 2px #00ffaa); }
         50% { opacity: 0.6; filter: drop-shadow(0 0 10px #00ffaa); }
       }
+
+      #ar-reco-overlay {
+        position: fixed;
+        top: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.75);
+        border: 1px solid #00e5ff;
+        border-radius: 20px;
+        padding: 6px 16px;
+        color: #00e5ff;
+        font-family: sans-serif;
+        font-size: 13px;
+        z-index: 50;
+        display: none;
+        pointer-events: none;
+        box-shadow: 0 0 8px rgba(0,229,255,0.4);
+      }
     `;
     document.head.appendChild(style);
   }
@@ -151,7 +165,30 @@ export class UI {
     return el;
   }
 
-  /** Показать рамку в режиме ожидания (мигание). */
+  _createRecoOverlay() {
+    const el = document.createElement('div');
+    el.id = 'ar-reco-overlay';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  showDetectedObjectsInfo(detections) {
+    if (!this.recoOverlay) return;
+    if (!detections || detections.length === 0) {
+      this.hideDetectedObjectsInfo();
+      return;
+    }
+    const infoStr = detections
+      .map(d => `${d.label} (${(d.score * 100).toFixed(0)}%)`)
+      .join(', ');
+    this.recoOverlay.textContent = `Распознано: ${infoStr}`;
+    this.recoOverlay.style.display = 'block';
+  }
+
+  hideDetectedObjectsInfo() {
+    if (this.recoOverlay) this.recoOverlay.style.display = 'none';
+  }
+
   showScanFrameBlink() {
     if (!this.scanFrame) return;
     if (this._scanEffectTimer) {
@@ -162,10 +199,6 @@ export class UI {
     this.scanFrame.classList.add('visible', 'blink');
   }
 
-  /**
-   * Запуск 2-секундного эффекта распознавания.
-   * @param {Function} [onDone] вызывается после окончания эффекта
-   */
   playScanEffect(onDone) {
     if (!this.scanFrame) {
       if (typeof onDone === 'function') onDone();
@@ -178,12 +211,10 @@ export class UI {
     this.scanFrame.classList.remove('blink');
     this.scanFrame.classList.add('visible', 'effect');
 
-    // перезапуск CSS-анимаций
     const line = this.scanFrame.querySelector('.scan-line');
     const fill = this.scanFrame.querySelector('.scan-fill');
     if (line) {
       line.style.animation = 'none';
-      // force reflow
       void line.offsetWidth;
       line.style.animation = '';
     }
@@ -232,7 +263,6 @@ export class UI {
   enableArButton() {
     this.btnAr.disabled = false;
     this.btnAr.style.display = 'block';
-    // Инициализация завершена — текст «Инициализация AR…» скрывается
     if (this.curtainText) this.curtainText.classList.add('ready');
   }
 
@@ -257,28 +287,17 @@ export class UI {
     this.btnEndAr.addEventListener('click', handler);
   }
 
-  // ───────────────────────── Curtain (штора инициализации) ─────────────────────────
-
-  /** Показывает штору (закрывает сцену, пока инициализируется/переинициализируется WebXR). */
   showCurtain() {
     if (!this.curtain) return;
     this.curtain.classList.remove('hidden');
-    // Вернуть текст «Инициализация AR…» при повторном показе шторы
     if (this.curtainText) this.curtainText.classList.remove('ready');
   }
 
-  /** Прячет штору (уезжает вверх) — вызывается, когда пол установлен (сессия готова). */
   hideCurtain() {
     if (!this.curtain) return;
     this.curtain.classList.add('hidden');
   }
 
-  // ───────────────────────── Quest-start panel ("ИЩИТЕ!") ─────────────────────────
-
-  /**
-   * @param {string} imageSrc Картинка одного из маркеров (recognitionimages)
-   * @param {string} [text]
-   */
   showQuestStart(imageSrc, text = 'ИЩИТЕ!') {
     if (!this.questStartPanel) return;
     if (this.questStartImg) {
@@ -298,13 +317,6 @@ export class UI {
     this.questStartPanel.classList.remove('open');
   }
 
-  // ───────────────────────── Result panel ─────────────────────────
-
-  /**
-   * @param {boolean} isCorrect
-   * @param {string} text Текст из RightReaction / WrongReaction
-   * @param {Function} [onClose] callback вызывается по кнопке "Дальше"
-   */
   showResult(isCorrect, text, onClose) {
     if (!this.resultPanel) return;
     this._onResultClose = onClose || null;

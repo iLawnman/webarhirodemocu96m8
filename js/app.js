@@ -5,12 +5,14 @@ import { ARScene } from './arscene.js';
 import { playSound } from "./audio.js";
 import { Settings } from './settings.js';
 import { ARSettings } from './arsettings.js';
+import { MediaPipeService } from './mediapipe.js';
 
 export class App {
   constructor() {
     this.ui = new UI();
     this.settings = new Settings();
     this.arSettings = new ARSettings();
+    this.mediaPipeService = new MediaPipeService(this.ui);
     this.recognition = null;
     this.arScene = new ARScene(this.ui);
 
@@ -52,8 +54,11 @@ export class App {
       this.ui.log('Settings failed to load, using defaults (unique_targets=0)', 'warn');
     }
 
-    // 2. Recognition
-    this.recognition = new ImageRecognition(this.ui, this.settings);
+    // 2. MediaPipe Initialisation
+    await this.mediaPipeService.init();
+
+    // 3. Recognition
+    this.recognition = new ImageRecognition(this.ui, this.settings, this.mediaPipeService);
     await this.recognition.init();
 
     this.ui.onStartAR(() => this.startAR());
