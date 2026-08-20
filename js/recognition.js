@@ -120,6 +120,7 @@ export class ImageRecognition {
             samples: [],
             scannedFrames: 0,
             isStable: false,
+            isCompletingScan: false,
             scannerObject: null,
             arTarget: null,
             anchor: null
@@ -156,19 +157,9 @@ export class ImageRecognition {
           const progress = Math.min(100, Math.floor((entry.scannedFrames / this.SCANNED_FRAMES_THRESHOLD) * 100));
           entry.scannerObject.updateProgress(progress);
 
-          if (entry.scannedFrames >= this.SCANNED_FRAMES_THRESHOLD) {
-            entry.isStable = true;
-            this.ui.log(`Marker ${markerName} successfully scanned & stabilized!`, 'ok');
-            playSound('scan_success');
-
-            if (entry.scannerObject) {
-              arScene.scene.remove(entry.scannerObject.getObject3D());
-              entry.scannerObject.dispose();
-              entry.scannerObject = null;
-            }
-
-            const stablePose = this.imageReco.computeStablePose(entry.samples);
-            this.createTargetObject(entry, stablePose, arScene);
+          if (entry.scannedFrames >= this.SCANNED_FRAMES_THRESHOLD && !entry.isCompletingScan) {
+            entry.isCompletingScan = true;
+            this.finishScanning(entry, markerName, arScene);
           }
         } else if (entry.arTarget) {
           // Если таргет уже создан и активен, плавно подтягиваем его к текущему трекингу маркера
@@ -187,6 +178,28 @@ export class ImageRecognition {
         }
       }
     }
+  }
+
+  async finishScanning(entry, markerName, arScene) {
+    this.ui.log(`Marker ${markerName} threshold reached. Playing scan effect...`, 'info');
+    playSound('scan_success');
+
+    // Дожидаемся полного завершения UI анимации сканирования
+    await new Promise((resolve) => {
+      this.ui.playScanEffect(() => resolve());
+    });
+
+    if (entry.scannerObject) {
+      arScene.scene.remove(entry.scannerObject.getObject3D());
+      entry.scannerObject.dispose();
+      entry.scannerObject = null;
+    }
+
+    entry.isStable = true;
+    this.ui.log(`Marker ${markerName} successfully scanned & stabilized!`, 'ok');
+
+    const stablePose = this.imageReco.computeStablePose(entry.samples);
+    await this.createTargetObject(entry, stablePose, arScene);
   }
 
   async createTargetObject(entry, stablePose, arScene) {
@@ -214,7 +227,6 @@ export class ImageRecognition {
       );
     }
 
-    // Включаем видимость объекта строго ПОСЛЕ полного завершения сканирования и создания
     targetGroup.visible = true;
 
     // Включаем pointer-events на DOM-элементах CSS3DObject
