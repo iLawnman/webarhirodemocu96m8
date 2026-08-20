@@ -1,7 +1,74 @@
 import * as THREE from 'three';
 import { CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
 
-const DEFAULT_PREFAB_URL = './assets/artargetprefab.html';
+// ВАЖНО: имя файла регистрозависимо на большинстве серверов/CDN (Linux, most
+// hosting). Файл называется "artargetPrefab.html" (заглавная P). Если тут
+// будет несовпадение регистра — fetch() в _ensurePrefab() молча упадёт в 404,
+// ошибка уйдёт в console.warn, и всё тихо откатится на _buildFallbackPrefab().
+// Именно это и было причиной "перекрытия панелей" на скриншоте: реальный
+// prefab не грузился, а fallback использовал другие (более тесные) позиции.
+const DEFAULT_PREFAB_URL = './assets/artargetPrefab.html';
+
+/**
+ * Канонический набор панелей и их дефолтные position/rotation/scale.
+ * Единственный источник дефолтных значений — используется:
+ *   1) для сборки fallback-prefab целиком (если fetch prefab-файла не удался);
+ *   2) для точечной синтезации ОТДЕЛЬНОЙ панели, если реальный prefab
+ *      загрузился, но в нём нет панели с таким data-name (например, кто-то
+ *      отредактировал artargetPrefab.html и забыл один из блоков).
+ *
+ * Если панель с данным именем ЕСТЬ в prefab — она используется как есть
+ * (авторская разметка в приоритете), эти значения не применяются.
+ *
+ * Числа рассчитаны от реальных CSS-размеров панелей (см. <style> в
+ * artargetPrefab.html: .ar-left-help-block/.ar-right-block/.ar-main-block/
+ * .ar-buttons-block), взят худший случай (max-height), чтобы панели НЕ
+ * пересекались даже при максимально длинном контенте:
+ *
+ *   LeftHelp/Right: 160×200px * 0.00048 = 0.0768 × 0.096 м
+ *   Main:           220×240px * 0.0005  = 0.11   × 0.12  м
+ *   Buttons:        200×120px * 0.0005  = 0.10   × 0.06  м
+ *
+ * Верхние края LeftHelp/Main/Right выровнены по общей линии (Y_top ≈ 0.09),
+ * ButtonsBlock подвешен вплотную под MainBlock с небольшим зазором.
+ * Меняешь CSS-размеры панелей — пересчитай эти позиции (и synхронно
+ * поправь data-position в artargetPrefab.html, чтобы два файла не разъезжались).
+ */
+const PANEL_ORDER = ['LeftHelpBlock', 'MainBlock', 'RightBlock', 'ButtonsBlock'];
+
+const PANEL_DEFAULTS = {
+    LeftHelpBlock: {
+        className: 'ar-left-help-block',
+        position: [-0.17, 0.042, 0],
+        rotation: [-90, 12, 0],
+        scale: 0.00048,
+        html: '<div class="ar-panel-help" data-field="help"></div>'
+    },
+    MainBlock: {
+        className: 'ar-main-block',
+        position: [0, 0.03, 0],
+        rotation: [-90, 0, 0],
+        scale: 0.0005,
+        html: `<div class="ar-panel-title" data-field="title"></div>
+       <div class="ar-panel-question" data-field="question"></div>
+       <div class="ar-panel-maintext" data-field="mainText"></div>`
+    },
+    RightBlock: {
+        className: 'ar-right-block',
+        position: [0.17, 0.042, 0],
+        rotation: [-90, -12, 0],
+        scale: 0.00048,
+        html: `<img class="ar-panel-image" data-field="imageSrc" alt="" />
+       <div class="ar-panel-help" data-field="imageCaption"></div>`
+    },
+    ButtonsBlock: {
+        className: 'ar-buttons-block',
+        position: [0, -0.075, 0],
+        rotation: [-90, 0, 0],
+        scale: 0.0005,
+        html: '<div class="ar-quest-body" data-field="buttons"></div>'
+    }
+};
 
 /**
  * ModelFactory — AR-таргет:
@@ -10,15 +77,12 @@ const DEFAULT_PREFAB_URL = './assets/artargetprefab.html';
  *                   | ButtonsBlock
  *
  * Все панели создаются всегда (даже при пустых данных).
- * Структура панелей и позиции — в artargetprefab.html.
+ * Структура панелей и позиции — в artargetPrefab.html (если он загрузился;
+ * если конкретной панели там нет — берутся дефолты из PANEL_DEFAULTS выше).
  * Входные данные: любой объект с полями answers.json / questtable
  * или упрощённый { title, question, mainText, help, imageSrc, options, answerType }.
  *
- * Макет (метры, относительно маркера):
- *   LeftHelpBlock  (-0.14, 0.03, 0)   rot(-90, 12, 0)
- *   MainBlock      ( 0.00, 0.055, 0)  rot(-90,  0, 0)
- *   RightBlock     ( 0.14, 0.03, 0)   rot(-90,-12, 0)
- *   ButtonsBlock   ( 0.00,-0.12, 0)   rot(-90,  0, 0)
+ * Макет по умолчанию (метры, относительно маркера) — см. PANEL_DEFAULTS.
  */
 export class ModelFactory {
     /**
@@ -240,72 +304,78 @@ export class ModelFactory {
 
             this._prefabCache = tpl.content || tpl;
         } catch (e) {
-            console.warn('[ModelFactory] prefab load failed, using fallback', url, e);
+            console.error(
+                `[ModelFactory] Не удалось загрузить prefab по адресу "${url}" — ` +
+                `используется встроенный fallback (позиции могут не совпадать с ` +
+                `авторской разметкой). Частая причина: несовпадение регистра в ` +
+                `имени файла на сервере/CDN. Проверь, что путь прописан ТОЧНО так ` +
+                `же, как называется файл на диске.`,
+                e
+            );
             this._prefabCache = this._buildFallbackPrefab();
         }
     }
 
+    /**
+     * Возвращает финальный список DOM-узлов панелей для сборки таргета,
+     * с мерджем "prefab-first, default as fallback":
+     *   - для каждого канонического имени (PANEL_ORDER) — если такая панель
+     *     ЕСТЬ в загруженном prefab (по data-name), берём её как есть
+     *     (авторская разметка/стили в приоритете);
+     *   - если такой панели в prefab НЕТ — синтезируем её из PANEL_DEFAULTS
+     *     (дефолтная позиция/поворот/масштаб, гарантированно без перекрытий);
+     *   - любые ДОПОЛНИТЕЛЬНЫЕ панели, которые есть в prefab, но не входят
+     *     в канонический набор (кастомные блоки автора) — тоже включаются,
+     *     как есть, со своими собственными data-position/rotation/scale.
+     */
     _getPanelNodes() {
-        if (this._prefabCache) {
-            return Array.from(this._prefabCache.querySelectorAll('[data-name]'));
+        if (!this._prefabCache) {
+            this._prefabCache = this._buildFallbackPrefab();
         }
-        // sync-path без await — fallback
-        this._prefabCache = this._buildFallbackPrefab();
-        return Array.from(this._prefabCache.querySelectorAll('[data-name]'));
+
+        const prefabNodes = Array.from(this._prefabCache.querySelectorAll('[data-name]'));
+        const byName = new Map(prefabNodes.map((n) => [n.dataset.name, n]));
+
+        const merged = [];
+
+        for (const name of PANEL_ORDER) {
+            const node = byName.get(name);
+            if (node) {
+                merged.push(node);
+                byName.delete(name);
+            } else {
+                merged.push(this._makeDefaultPanelNode(name));
+            }
+        }
+
+        // прочие, не-канонические панели, объявленные прямо в prefab
+        for (const node of byName.values()) {
+            merged.push(node);
+        }
+
+        return merged;
     }
 
-    /** Минимальная разметка, если prefab не загрузился */
+    /** Синтезирует один дефолтный узел панели из PANEL_DEFAULTS. */
+    _makeDefaultPanelNode(name) {
+        const def = PANEL_DEFAULTS[name];
+        if (!def) return null;
+        const div = document.createElement('div');
+        div.className = `ar-css3d-panel ${def.className}`;
+        div.dataset.name = name;
+        div.dataset.position = def.position.join(', ');
+        div.dataset.rotation = def.rotation.join(', ');
+        div.dataset.scale = String(def.scale);
+        div.innerHTML = def.html;
+        return div;
+    }
+
+    /** Минимальная разметка целиком, если prefab не загрузился вообще. */
     _buildFallbackPrefab() {
         const root = document.createDocumentFragment();
-
-        const make = (name, className, pos, rot, scale, innerHTML) => {
-            const div = document.createElement('div');
-            div.className = `ar-css3d-panel ${className}`;
-            div.dataset.name = name;
-            div.dataset.position = pos;
-            div.dataset.rotation = rot;
-            div.dataset.scale = scale;
-            div.innerHTML = innerHTML;
-            root.appendChild(div);
-        };
-
-        // Позиции соответствуют макету (увеличины отступы, чтобы не было кучи)
-        make(
-            'LeftHelpBlock',
-            'ar-left-help-block',
-            '-0.14, 0.03, 0',
-            '-90, 12, 0',
-            '0.00048',
-            '<div class="ar-panel-help" data-field="help"></div>'
-        );
-        make(
-            'MainBlock',
-            'ar-main-block',
-            '0, 0.055, 0',
-            '-90, 0, 0',
-            '0.0005',
-            `<div class="ar-panel-title" data-field="title"></div>
-       <div class="ar-panel-question" data-field="question"></div>
-       <div class="ar-panel-maintext" data-field="mainText"></div>`
-        );
-        make(
-            'RightBlock',
-            'ar-right-block',
-            '0.14, 0.03, 0',
-            '-90, -12, 0',
-            '0.00048',
-            `<img class="ar-panel-image" data-field="imageSrc" alt="" />
-       <div class="ar-panel-help" data-field="imageCaption"></div>`
-        );
-        make(
-            'ButtonsBlock',
-            'ar-buttons-block',
-            '0, -0.12, 0',
-            '-90, 0, 0',
-            '0.0005',
-            '<div class="ar-quest-body" data-field="buttons"></div>'
-        );
-
+        for (const name of PANEL_ORDER) {
+            root.appendChild(this._makeDefaultPanelNode(name));
+        }
         return root;
     }
 
@@ -350,6 +420,36 @@ export class ModelFactory {
         if (name === 'ButtonsBlock') {
             const body = el.querySelector('[data-field="buttons"]') || el;
             this._buildQuestionBody(body, data, onAnswer);
+        }
+
+        // Кастомная панель, объявленная в prefab, но не входящая в канонический
+        // набор (LeftHelpBlock/MainBlock/RightBlock/ButtonsBlock). Мы не знаем
+        // её конкретной семантики, поэтому делаем максимум разумного:
+        // подставляем значения по [data-field] из data.raw / data по имени поля.
+        if (!['LeftHelpBlock', 'MainBlock', 'RightBlock', 'ButtonsBlock'].includes(name)) {
+            const fields = el.querySelectorAll('[data-field]');
+            let hasContent = false;
+            fields.forEach((node) => {
+                const field = node.dataset.field;
+                if (!field) return;
+                const raw = data.raw ? data.raw[field] : undefined;
+                const val = raw !== undefined && raw !== null
+                    ? String(raw)
+                    : (data[field] !== undefined && data[field] !== null ? String(data[field]) : '');
+
+                if (node.tagName === 'IMG') {
+                    if (val) {
+                        node.src = val;
+                        hasContent = true;
+                    } else {
+                        node.removeAttribute('src');
+                    }
+                } else {
+                    node.textContent = val;
+                    if (val) hasContent = true;
+                }
+            });
+            if (!hasContent) el.classList.add('ar-panel-empty');
         }
     }
 
