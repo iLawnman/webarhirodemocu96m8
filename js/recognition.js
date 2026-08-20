@@ -4,6 +4,7 @@ import { QuestManager } from './quests.js';
 import { Policies } from './policies.js';
 import { createArTarget } from './artarget.js';
 import { Reco3DObject } from './reco3dobject.js';
+import { MediaPipeReco } from './mediapipe.js';
 import { playSound } from './audio.js';
 
 export class ImageRecognition {
