@@ -26,7 +26,7 @@ export class ImageRecognition {
       this.policies
     );
 
-    this.mediaPipeReco = new MediaPipeReco(this.ui, this.mediaPipeService);
+    this.mediaPipeReco = new MediaPipeReco(this.ui, this.mediaPipeReco);
 
     this.trackedMarkers = new Map();
     this.xrSession = null;
