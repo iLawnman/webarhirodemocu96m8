@@ -3,7 +3,7 @@ import { ImageReco } from './imagereco.js';
 import { QuestManager } from './quests.js';
 import { Policies } from './policies.js';
 import { createArTarget } from './artarget.js';
-import { Scanner3DObject } from './reco3dobject.js';
+import { Reco3DObject } from './reco3dobject.js';
 import { playSound } from './audio.js';
 
 export class ImageRecognition {
@@ -138,7 +138,7 @@ export class ImageRecognition {
           });
 
           if (!entry.scannerObject) {
-            const scanner = new Scanner3DObject({ radius: 0.1, color: 0x00ffaa });
+            const scanner = new Reco3DObject({ radius: 0.1, color: 0x00ffaa });
             const obj3D = scanner.getObject3D();
             obj3D.position.set(pos.x, pos.y, pos.z);
             obj3D.quaternion.set(ori.x, ori.y, ori.z, ori.w);
