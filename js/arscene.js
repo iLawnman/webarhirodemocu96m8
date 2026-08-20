@@ -1,6 +1,6 @@
 // js/arscene.js
 import * as THREE from 'three';
-import { CSS3DRenderer } from './CSS3DRenderer.js';
+import { CSS3DRenderer } from 'three/addons/renderers/CSS3DRenderer.js';
 
 export class ARScene {
   constructor(ui) {
