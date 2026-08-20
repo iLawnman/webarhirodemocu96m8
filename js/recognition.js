@@ -26,7 +26,6 @@ export class ImageRecognition {
       this.policies
     );
 
-    this.mediaPipeService = new MediaPipeReco(this.ui);
     this.mediaPipeReco = new MediaPipeReco(this.ui, this.mediaPipeService);
 
     this.trackedMarkers = new Map();
@@ -51,7 +50,6 @@ export class ImageRecognition {
     this.policies.init();
 
     await this.imageReco.init();
-    await this.mediaPipeService.init();
 
     this.ui.log('ImageRecognition fully initialized', 'ok');
   }
