@@ -33,20 +33,36 @@ const DEFAULT_PREFAB_URL = './assets/artargetPrefab.html';
  * ButtonsBlock подвешен вплотную под MainBlock с небольшим зазором.
  * Меняешь CSS-размеры панелей — пересчитай эти позиции (и synхронно
  * поправь data-position в artargetPrefab.html, чтобы два файла не разъезжались).
+ *
+ * ─── про Z (глубина) ────────────────────────────────────────────────────
+ * Раньше у всех 4 панелей z=0 — они лежали в одной плоскости. CSS3DRenderer
+ * каждый кадр пересортировывает DOM-узлы по расстоянию до камеры; когда
+ * расстояния у нескольких панелей почти равны (как тут, из-за общего z=0
+ * и лёгких Y-поворотов ±12°), при малейшем движении камеры порядок сортировки
+ * "перещёлкивается" туда-обратно — из-за этого текст визуально мерцает,
+ * а невидимая в данный момент "верхняя" по z-порядку панель может перехватывать
+ * клики у той, что должна быть кликабельной (кнопки).
+ * Фикс: развели панели по z на разные, заведомо различающиеся значения,
+ * чтобы порядок глубины был однозначным и стабильным при любом ракурсе:
+ *   ButtonsBlock (0.004) — впереди всех, это интерактивный слой, ему
+ *                          нельзя давать шанс оказаться "под" чем-то ещё;
+ *   MainBlock    (0.002) — второй по важности, центральный контент;
+ *   LeftHelpBlock/RightBlock (0.001) — фон/подсказки, дальше всех.
+ * Значения маленькие (миллиметры), от маркера панели визуально не отрываются.
  */
 const PANEL_ORDER = ['LeftHelpBlock', 'MainBlock', 'RightBlock', 'ButtonsBlock'];
 
 const PANEL_DEFAULTS = {
     LeftHelpBlock: {
         className: 'ar-left-help-block',
-        position: [-0.17, 0.042, 0],
+        position: [-0.17, 0.042, 0.001],
         rotation: [-90, 12, 0],
         scale: 0.00048,
         html: '<div class="ar-panel-help" data-field="help"></div>'
     },
     MainBlock: {
         className: 'ar-main-block',
-        position: [0, 0.03, 0],
+        position: [0, 0.03, 0.002],
         rotation: [-90, 0, 0],
         scale: 0.0005,
         html: `<div class="ar-panel-title" data-field="title"></div>
@@ -55,7 +71,7 @@ const PANEL_DEFAULTS = {
     },
     RightBlock: {
         className: 'ar-right-block',
-        position: [0.17, 0.042, 0],
+        position: [0.17, 0.042, 0.001],
         rotation: [-90, -12, 0],
         scale: 0.00048,
         html: `<img class="ar-panel-image" data-field="imageSrc" alt="" />
@@ -63,7 +79,7 @@ const PANEL_DEFAULTS = {
     },
     ButtonsBlock: {
         className: 'ar-buttons-block',
-        position: [0, -0.075, 0],
+        position: [0, -0.075, 0.004],
         rotation: [-90, 0, 0],
         scale: 0.0005,
         html: '<div class="ar-quest-body" data-field="buttons"></div>'
@@ -283,8 +299,18 @@ export class ModelFactory {
 
     // ─── prefab load / fallback ────────────────────────────────────────────────
 
+    /**
+     * Загружает реальный prefab по сети и кеширует его в this._prefabCache.
+     *
+     * ВАЖНО про кэш: this._prefabCache хранит ТОЛЬКО успешно загруженный
+     * реальный prefab. Если fetch не удался — мы НЕ пишем сюда fallback,
+     * иначе следующий вызов _ensurePrefab() увидит "кэш уже заполнен" и
+     * больше никогда не попытается загрузить настоящий prefab заново
+     * (даже если сеть/путь потом починили). Раньше здесь была именно эта
+     * ошибка — один неудачный fetch "залипал" на fallback-разметке навсегда.
+     */
     async _ensurePrefab(url) {
-        if (this._prefabCache) return;
+        if (this._prefabCache) return; // уже успешно загружен реальный prefab
         try {
             const res = await fetch(url, { cache: 'no-cache' });
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -306,13 +332,15 @@ export class ModelFactory {
         } catch (e) {
             console.error(
                 `[ModelFactory] Не удалось загрузить prefab по адресу "${url}" — ` +
-                `используется встроенный fallback (позиции могут не совпадать с ` +
-                `авторской разметкой). Частая причина: несовпадение регистра в ` +
-                `имени файла на сервере/CDN. Проверь, что путь прописан ТОЧНО так ` +
-                `же, как называется файл на диске.`,
+                `на ЭТОТ вызов используется временный fallback (позиции могут не ` +
+                `совпадать с авторской разметкой). Кэш НЕ поражён — следующий вызов ` +
+                `createArTarget() попробует загрузить реальный prefab заново. ` +
+                `Частая причина 404: несовпадение регистра в имени файла на ` +
+                `сервере/CDN — проверь, что путь прописан ТОЧНО так же, как ` +
+                `называется файл на диске.`,
                 e
             );
-            this._prefabCache = this._buildFallbackPrefab();
+            // намеренно НЕ пишем fallback в this._prefabCache — см. коммент выше
         }
     }
 
@@ -327,13 +355,15 @@ export class ModelFactory {
      *   - любые ДОПОЛНИТЕЛЬНЫЕ панели, которые есть в prefab, но не входят
      *     в канонический набор (кастомные блоки автора) — тоже включаются,
      *     как есть, со своими собственными data-position/rotation/scale.
+     *
+     * Если реальный prefab ещё не загружен (this._prefabCache пуст), берём
+     * fallback ТОЛЬКО на это обращение — он не сохраняется в this._prefabCache,
+     * чтобы не заблокировать последующую успешную загрузку настоящего prefab.
      */
     _getPanelNodes() {
-        if (!this._prefabCache) {
-            this._prefabCache = this._buildFallbackPrefab();
-        }
+        const source = this._prefabCache || this._buildFallbackPrefab();
 
-        const prefabNodes = Array.from(this._prefabCache.querySelectorAll('[data-name]'));
+        const prefabNodes = Array.from(source.querySelectorAll('[data-name]'));
         const byName = new Map(prefabNodes.map((n) => [n.dataset.name, n]));
 
         const merged = [];

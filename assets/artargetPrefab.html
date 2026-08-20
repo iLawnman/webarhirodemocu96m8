@@ -19,10 +19,20 @@
       общей линии Y_top ≈ 0.09 (у Main центр ниже — она выше и крупнее).
       Если меняешь width/height в CSS — пересчитай эти позиции.
 
-      LeftHelpBlock  (-0.17,  0.042, 0)  rot(-90, 12, 0)  scale 0.00048
-      MainBlock      ( 0.00,  0.03,  0)  rot(-90,  0, 0)  scale 0.0005
-      RightBlock     ( 0.17,  0.042, 0)  rot(-90,-12, 0)  scale 0.00048
-      ButtonsBlock   ( 0.00, -0.075, 0)  rot(-90,  0, 0)  scale 0.0005
+      LeftHelpBlock  (-0.17,  0.042, 0.001)  rot(-90, 12, 0)  scale 0.00048
+      MainBlock      ( 0.00,  0.03,  0.002)  rot(-90,  0, 0)  scale 0.0005
+      RightBlock     ( 0.17,  0.042, 0.001)  rot(-90,-12, 0)  scale 0.00048
+      ButtonsBlock   ( 0.00, -0.075, 0.004)  rot(-90,  0, 0)  scale 0.0005
+
+      Про Z: раньше у всех панелей z=0 (одна плоскость) — из-за этого
+      CSS3DRenderer каждый кадр пересортировывал их почти случайно при
+      движении камеры (расстояния до камеры были почти равны), что давало
+      мерцание текста и позволяло "невидимой" по z-порядку панели
+      перехватывать клики у ButtonsBlock. Теперь у каждой панели свой,
+      явно разный z (в метрах, миллиметровые значения) — порядок глубины
+      однозначен и стабилен: ButtonsBlock всегда ближе всех (интерактивный
+      слой не должен ничем перекрываться), дальше MainBlock, дальше всех —
+      LeftHelp/Right.
 
       Эти же значения продублированы в artarget.js → PANEL_DEFAULTS
       (используются, только если панель с таким data-name отсутствует
@@ -38,6 +48,11 @@
             border: 2px solid rgba(0, 255, 170, 0.55);
             border-radius: 12px;
             padding: 10px 12px;
+            /* уменьшает артефакты мерцания/дрожания текста у CSS3D-элементов
+               при перспективных преобразованиях во время движения камеры */
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            will-change: transform;
             pointer-events: auto;
             overflow: hidden;
             display: flex;
@@ -204,7 +219,7 @@
     <div
             class="ar-css3d-panel ar-left-help-block"
             data-name="LeftHelpBlock"
-            data-position="-0.17, 0.042, 0"
+            data-position="-0.17, 0.042, 0.001"
             data-rotation="-90, 12, 0"
             data-scale="0.00048"
     >
@@ -215,7 +230,7 @@
     <div
             class="ar-css3d-panel ar-main-block"
             data-name="MainBlock"
-            data-position="0, 0.03, 0"
+            data-position="0, 0.03, 0.002"
             data-rotation="-90, 0, 0"
             data-scale="0.0005"
     >
@@ -228,7 +243,7 @@
     <div
             class="ar-css3d-panel ar-right-block"
             data-name="RightBlock"
-            data-position="0.17, 0.042, 0"
+            data-position="0.17, 0.042, 0.001"
             data-rotation="-90, -12, 0"
             data-scale="0.00048"
     >
@@ -240,7 +255,7 @@
     <div
             class="ar-css3d-panel ar-buttons-block"
             data-name="ButtonsBlock"
-            data-position="0, -0.075, 0"
+            data-position="0, -0.075, 0.004"
             data-rotation="-90, 0, 0"
             data-scale="0.0005"
     >
