@@ -1,301 +1,234 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8" />
+    <title>AR Target Prefab</title>
+    <!--
+      Структура AR-таргета (CSS3D).
+      Панели всегда присутствуют. Заполнение — из targetData / JSON.
+      Позиции и повороты заданы в data-* (метры / градусы).
+      Макет:
+            [ LeftHelp ]  [ MainBlock ]  [ RightBlock ]
+                                [ ButtonsBlock ]
+    -->
+    <style>
+        /* Базовые стили панелей (темы ARSettings могут переопределять) */
+        .ar-css3d-panel {
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            color: #fff;
+            background: rgba(8, 12, 24, 0.88);
+            border: 2px solid rgba(0, 255, 170, 0.55);
+            border-radius: 12px;
+            padding: 10px 12px;
+            pointer-events: auto;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .ar-left-help-block,
+        .ar-right-block {
+            width: 160px;
+            min-height: 140px;
+            max-height: 200px;
+        }
+
+        .ar-main-block {
+            width: 220px;
+            min-height: 160px;
+            max-height: 240px;
+        }
+
+        .ar-buttons-block {
+            width: 200px;
+            min-height: 56px;
+            max-height: 120px;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .ar-panel-title {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 0.03em;
+            text-transform: uppercase;
+            color: #00ffaa;
+            line-height: 1.2;
+            word-break: break-word;
+        }
+
+        .ar-panel-question,
+        .ar-panel-maintext,
+        .ar-panel-help {
+            font-size: 12px;
+            line-height: 1.35;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .ar-panel-help {
+            color: #b8c4d8;
+            flex: 1;
+        }
+
+        .ar-panel-image {
+            display: block;
+            width: 100%;
+            height: auto;
+            max-height: 160px;
+            object-fit: contain;
+            border-radius: 6px;
+            background: rgba(0, 0, 0, 0.25);
+        }
+
+        .ar-panel-image:not([src]),
+        .ar-panel-image[src=""] {
+            display: none;
+        }
+
+        .ar-quest-body {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+            align-items: center;
+        }
+
+        .ar-quest-options-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            justify-content: center;
+            width: 100%;
+        }
+
+        .ar-quest-btn,
+        .ar-quest-submit-btn,
+        .ar-slide-nav {
+            appearance: none;
+            border: 1px solid rgba(0, 255, 170, 0.6);
+            background: rgba(0, 40, 30, 0.85);
+            color: #e8fff6;
+            border-radius: 8px;
+            padding: 6px 10px;
+            font-size: 11px;
+            font-weight: 600;
+            cursor: pointer;
+            line-height: 1.2;
+        }
+
+        .ar-quest-btn:hover,
+        .ar-quest-submit-btn:hover,
+        .ar-slide-nav:hover {
+            background: rgba(0, 60, 45, 0.95);
+            border-color: #00ffaa;
+        }
+
+        .ar-quest-input-block {
+            display: flex;
+            gap: 6px;
+            width: 100%;
+            align-items: center;
+        }
+
+        .ar-quest-input {
+            flex: 1;
+            min-width: 0;
+            padding: 6px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            background: rgba(0, 0, 0, 0.45);
+            color: #fff;
+            font-size: 12px;
+        }
+
+        .ar-quest-slider {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            width: 100%;
+        }
+
+        .ar-slide-content {
+            flex: 1;
+            text-align: center;
+            font-size: 11px;
+            line-height: 1.3;
+            min-height: 28px;
+            word-break: break-word;
+        }
+
+        .ar-slide-nav {
+            flex-shrink: 0;
+            width: 28px;
+            padding: 4px 0;
+        }
+
+        /* Пустые панели остаются видимыми (рамка), контент может быть пустым */
+        .ar-panel-empty .ar-panel-help,
+        .ar-panel-empty .ar-panel-title,
+        .ar-panel-empty .ar-panel-question {
+            opacity: 0.35;
+        }
+    </style>
+</head>
+<body>
 <template id="ar-target">
-  <panel
-    name="BackGradient"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,0.000,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="BackGradient" data-image="./assets/Back3"></div>
-        </panel>
-  <panel
-    name="TitleText_bg"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="-0.002,0.185,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="TitleText_bg" data-color="#070707EE" data-image="./assets/ButtonPanelBG"></div>
-        </panel>
-  <panel
-    name="TitleText"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,0.195,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="TitleText" data-font="nk_vitez SDF" data-color="#FFD700"></div>
-        </panel>
-  <panel
-    name="MainText_bg"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="-0.003,0.110,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="MainText_bg" data-color="#070707EE" data-image="./assets/MainTextPanelDark"></div>
-        </panel>
-  <panel
-    name="MainText_MainTxt"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,0.120,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="MainText_MainTxt" data-font="nk_vitez SDF" data-color="#FFD700"></div>
-        </panel>
-  <panel
-    name="additionalCanvas"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.342,0.129,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="additionalCanvas" data-prefab="./assets/BigSparks"></div>
-        </panel>
-  <panel
-    name="RightPanel_bgRight_Panel"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.342,0.112,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="RightPanel_bgRight_Panel" data-color="#070707EE" data-image="./assets/MainTextPanelDark"></div>
-        </panel>
-  <panel
-    name="LeftPanel_bgLeftPanel"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="-0.340,0.110,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="LeftPanel_bgLeftPanel" data-color="#070707EE" data-image="./assets/MainTextPanelDark"></div>
-        </panel>
-  <panel
-    name="LeftPanel_HelpUp"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="-0.347,0.223,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="LeftPanel_HelpUp" data-font="RobotoSlab-Regular SDF" data-color="#FF69B4"></div>
-        </panel>
-  <panel
-    name="LeftPanel_HelpDown"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="-0.348,0.029,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="LeftPanel_HelpDown" data-font="RobotoSlab-Regular SDF" data-color="#FF69B4"></div>
-        </panel>
-  <panel
-    name="Buttons_bgButtonsPanel"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_bgButtonsPanel" data-color="#070707EE" data-image="./assets/ButtonPanelBG"></div>
-        </panel>
-  <panel
-    name="Buttons_Button_OK_Image"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_Button_OK_Image" data-color="#E90E1B" data-image="./assets/Emerald"></div>
-        </panel>
-  <panel
-    name="Buttons_Button_OK_Text"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_Button_OK_Text" data-font="nk_vitez SDF"></div>
-        </panel>
-  <panel
-    name="Buttons_Button_Left"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_Button_Left" data-color="#DAA520" data-image="./assets/angle-left"></div>
-        </panel>
-  <panel
-    name="Buttons_Button_Right"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_Button_Right" data-color="#DAA520" data-image="./assets/angle-right"></div>
-        </panel>
-  <panel
-    name="Buttons_Button_Right_Label"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_Button_Right_Label" data-color="#D6A617"></div>
-        </panel>
-  <panel
-    name="Buttons_Button_NEXT_Image"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_Button_NEXT_Image" data-color="#FA0617" data-image="./assets/RoundedSquareFull512px"></div>
-        </panel>
-  <panel
-    name="Buttons_Button_NEXT_Text"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_Button_NEXT_Text" data-font="nk_vitez SDF" data-color="#E9BF15" data-text="Дальше"></div>
-        </panel>
-  <panel
-    name="Buttons_4Buttons_Image"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_4Buttons_Image" data-color="#2F32FF" data-image="./assets/Circle64px1Shadow"></div>
-        </panel>
-  <panel
-    name="Buttons_4Buttons_Text"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_4Buttons_Text" data-font="nk_vitez SDF" data-color="#E9BF15"></div>
-        </panel>
-  <panel
-    name="Buttons_InputField"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_InputField" data-color="#6A550E" data-image="./assets/InputOutline"></div>
-        </panel>
-  <panel
-    name="Buttons_InputField_Placeholder"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_InputField_Placeholder" data-font="nk_vitez SDF" data-color="#D19C27" data-text="ВВЕДИТЕ ОТВЕТ"></div>
-        </panel>
-  <panel
-    name="Buttons_InputField_Text"
-    data-width="0.3"
-    data-height="0.18"
-    data-position="0.000,-0.330,0.000"
-    data-rotation="0,0,0"
-    data-scale="1.000,1.000,1.000"
-  >
-
-
-
-    <div class="panel prop-panel" data-group="Buttons_InputField_Text" data-font="nk_vitez SDF" data-color="#FFFFFF"></div>
-        </panel>
+    <!--
+      data-name      — ключ в userData и имя CSS3DObject
+      data-position  — x,y,z в метрах относительно маркера
+      data-rotation  — rx,ry,rz в градусах (потом → радианы)
+      data-scale     — единый scale CSS3DObject (по умолчанию 0.0005)
+    -->
+
+    <!-- LeftHelpBlock — help слева -->
+    <div
+            class="ar-css3d-panel ar-left-help-block"
+            data-name="LeftHelpBlock"
+            data-position="-0.115, 0.025, 0"
+            data-rotation="-90, 16, 0"
+            data-scale="0.00048"
+    >
+        <div class="ar-panel-help" data-field="help"></div>
+    </div>
+
+    <!-- MainBlock — вопрос / вариант ответа (центр) -->
+    <div
+            class="ar-css3d-panel ar-main-block"
+            data-name="MainBlock"
+            data-position="0, 0.04, 0"
+            data-rotation="-90, 0, 0"
+            data-scale="0.0005"
+    >
+        <div class="ar-panel-title" data-field="title"></div>
+        <div class="ar-panel-question" data-field="question"></div>
+        <div class="ar-panel-maintext" data-field="mainText"></div>
+    </div>
+
+    <!-- RightBlock — картинка для ответа (справа) -->
+    <div
+            class="ar-css3d-panel ar-right-block"
+            data-name="RightBlock"
+            data-position="0.115, 0.025, 0"
+            data-rotation="-90, -16, 0"
+            data-scale="0.00048"
+    >
+        <img class="ar-panel-image" data-field="imageSrc" alt="" />
+        <div class="ar-panel-help" data-field="imageCaption"></div>
+    </div>
+
+    <!-- ButtonsBlock — место для кнопок (под центром) -->
+    <div
+            class="ar-css3d-panel ar-buttons-block"
+            data-name="ButtonsBlock"
+            data-position="0, -0.085, 0"
+            data-rotation="-90, 0, 0"
+            data-scale="0.0005"
+    >
+        <div class="ar-quest-body" data-field="buttons"></div>
+    </div>
 </template>
+</body>
+</html>
