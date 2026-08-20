@@ -2,15 +2,17 @@
 import { UI } from './ui.js';
 import { ImageRecognition } from './recognition.js';
 import { ARScene } from './arscene.js';
-import { playSound } from './audio.js';
+import { playSound } from "./audio.js";
 import { Settings } from './settings.js';
 import { ARSettings } from './arsettings.js';
+import { MediaPipeService } from './mediapipe.js';
 
 export class App {
   constructor() {
     this.ui = new UI();
     this.settings = new Settings();
     this.arSettings = new ARSettings();
+    this.mediaPipeService = new MediaPipeService(this.ui);
     this.recognition = null;
     this.arScene = new ARScene(this.ui);
 
@@ -28,6 +30,7 @@ export class App {
 
     this.ui.showCurtain();
 
+    // 0. AR CSS-темы
     this.ui.log('Loading AR CSS themes...', 'info');
     try {
       await this.arSettings.init();
@@ -39,6 +42,7 @@ export class App {
       this.ui.log('AR themes failed: ' + (e && e.message ? e.message : e), 'warn');
     }
 
+    // 1. Settings
     this.ui.log('Loading settings...', 'info');
     await this.settings.load();
     if (this.settings.isLoaded) {
@@ -50,7 +54,11 @@ export class App {
       this.ui.log('Settings failed to load, using defaults (unique_targets=0)', 'warn');
     }
 
-    this.recognition = new ImageRecognition(this.ui, this.settings);
+    // 2. MediaPipe Initialisation
+    await this.mediaPipeService.init();
+
+    // 3. Recognition
+    this.recognition = new ImageRecognition(this.ui, this.settings, this.mediaPipeService);
     await this.recognition.init();
 
     this.ui.onStartAR(() => this.startAR());
@@ -59,11 +67,6 @@ export class App {
     this.arScene.renderer.setAnimationLoop((timestamp, frame) => {
       this.onXRFrame(timestamp, frame);
     });
-
-    // Активируем UI и снимаем блокирующую шторку после завершения всей инициализации
-    this.ui.enableArButton();
-    this.ui.hideCurtain();
-    this.ui.setHint('Нажмите Start AR для запуска');
   }
 
   async startAR() {
@@ -95,12 +98,11 @@ export class App {
 
     this.ui.log('trackedImages: ' + trackedImages.length, 'info');
 
-    // Направляем domOverlay строго на элемент CSS3D-слоя для корректного перехвата нажатий
     const sessionInit = {
       requiredFeatures: ['local-floor'],
       optionalFeatures: ['image-tracking', 'dom-overlay', 'anchors'],
       trackedImages,
-      domOverlay: { root: this.arScene.cssRenderer.domElement }
+      domOverlay: { root: document.body }
     };
 
     try {
@@ -119,21 +121,11 @@ export class App {
         this.ui.enableArButton();
         return;
       }
-      playSound('click');
+      playSound("click");
     }
 
     await this.arScene.renderer.xr.setSession(this.xrSession);
     this.ui.log('Renderer session set (WebGL + local-floor)', 'ok');
-
-    const domOverlayType = this.xrSession.domOverlayState?.type;
-    if (domOverlayType) {
-      this.ui.log(`dom-overlay ГРАНТОВАН, type="${domOverlayType}" — CSS3D-кнопки должны получать клики`, 'ok');
-    } else {
-      this.ui.log(
-          'dom-overlay НЕ гранован браузером (domOverlayState отсутствует)',
-          'err'
-      );
-    }
 
     this.ui.showEndArButton();
     this.imageTrackingEnabled = true;
